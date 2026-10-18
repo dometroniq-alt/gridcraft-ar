@@ -19,6 +19,16 @@
   <i>By the ArtCraft team.</i>
 </p>
 
+> [!IMPORTANT]
+> **This is GridCraft AR** — a fork of [storytold/gridcraft](https://github.com/storytold/gridcraft) that adds an Arabic
+> interface (right-to-left layout, 990+ translated strings, embedded Noto Sans Arabic), Arabic workbooks by default,
+> kashida justification in cells, and visual help (a drawn, animated thumbnail and a plain-words example for every
+> ribbon button and menu item, in English and Arabic). It installs beside GridCraft, not over it.
+> Branch `ar-main`; releases: [Releases](https://github.com/dometroniq-alt/gridcraft-ar/releases) ·
+> [README in Arabic](README.ar.md) · [Releasing](#releasing-gridcraft-ar).
+> Everything that makes this a spreadsheet is GridCraft, by the ArtCraft team and the GridCraft contributors
+> (MIT OR Apache-2.0).
+
 <p align="center">
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-147a40?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on macOS, Windows, Linux, BSD and the web" src="https://img.shields.io/badge/runs%20on-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20BSD%20%C2%B7%20Web-1f9d55?style=flat-square">
@@ -342,3 +352,16 @@ Forks and modified versions must remove them.
   <a href="https://getartcraft.com/"><img alt="ArtCraft" src="docs/brand/artcraft-mark.svg" width="28"></a><br>
   <sub>Made by the <a href="https://getartcraft.com/">ArtCraft</a> team and community.</sub>
 </p>
+
+## Releasing GridCraft AR
+
+No tag pushing and no clicking through the web UI (the fork's GitHub proxy forbids both):
+
+1. Write `docs/releases/v0.7.0-ar.N.md` (the release notes).
+2. Put the tag in `ar-release.txt` (one line, e.g. `v0.7.0-ar.2`).
+3. Commit with a message starting with `release:` and push `ar-main`.
+
+`.github/workflows/release-ar.yml` builds the MSI and the portable zip on a Windows runner
+(`packaging/windows/package-ar.ps1` → `gridcraft-ar.wxs`), tags the commit and publishes the GitHub Release.
+GitHub Actions must be enabled once on the fork (Actions tab → *I understand, enable them*).
+On a PC: `powershell -File packaging/windows/package-ar.ps1` needs Rust (MSVC), the Windows SDK and WiX 5.
