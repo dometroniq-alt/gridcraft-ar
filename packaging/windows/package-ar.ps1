@@ -50,7 +50,7 @@ $Dist = if ($env:DIST) { $env:DIST } else { Join-Path $Root 'dist\release' }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Root 'target' }
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
-if (-not $env:GRIDCRAFT_BUILD_SHA) { $env:GRIDCRAFT_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
+if (-not $env:GRIDCRAFT_BUILD_SHA -and (Get-Command git -ErrorAction SilentlyContinue)) { $env:GRIDCRAFT_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
 if (-not $env:GRIDCRAFT_BUILD_DATE) { $env:GRIDCRAFT_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
 
 Write-Output "GridCraft $Version for Windows $Arch ($Target)"

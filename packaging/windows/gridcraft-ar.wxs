@@ -168,6 +168,7 @@
         </File>
 
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\gridcraft.exe" Value="[#GridcraftExe]" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\gridcraft-ar.exe" Value="[#GridcraftExe]" Type="string" />
 
         <!-- ProgIds: how Explorer opens a file with GridCraft. Nothing here sets HKCR\.<ext>'s
              default value, so the user's current default app is left alone. -->
