@@ -721,13 +721,14 @@ impl Dialog {
             }
             "journal" => Dialog::custom("journal", "Action Journal", json!({})),
             // GridCraft AR: the built-in developer systems (UI Kit gallery, icon sheet, self-test,
-            // checklist), see `crate::dev_tools`. `tab` picks the open tab.
+            // checklist), see `crate::dev_tools`. `tab` picks the open tab, `search` the filter.
             "uiKit" => {
                 let mut d = Dialog::custom("uiKit", "GridCraft AR UI Kit", json!({}));
                 d.tab = match p("tab").as_str() {
                     Some(t) if crate::dev_tools::TABS.contains(&t) => t.to_string(),
                     _ => "UI Kit".into(),
                 };
+                d.search = p("search").as_str().unwrap_or_default().to_string();
                 d
             }
             "macros" => {

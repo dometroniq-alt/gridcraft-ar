@@ -133,6 +133,12 @@ pub enum Icon {
     OpenFolder,
     Info,
     Print,
+    /// Home › Send (GridCraft AR): a grid whose rows fly, by an arrow, into a portrait page.
+    SendWord,
+    /// A grid with an arrow into a landscape slide.
+    SendDeck,
+    /// An arrow coming back into a grid.
+    ReceiveCraft,
 }
 
 struct G<'a> {
@@ -648,6 +654,44 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
             g.circle(8.0, 8.0, 5.0, None, Some(c));
             g.circle(8.0, 8.0, 2.0, Some(c), None);
         }
+        Icon::SendWord => {
+            // A small grid at the left, an arrow, a portrait page with text lines at the right.
+            g.rect(1.5, 4.0, 6.0, 8.0, None, Some(c));
+            g.stroke(&[(1.5, 6.7), (7.5, 6.7)], light);
+            g.stroke(&[(1.5, 9.3), (7.5, 9.3)], light);
+            g.stroke(&[(4.5, 4.0), (4.5, 12.0)], light);
+            g.line(&[(8.0, 8.0), (10.5, 8.0)], BLUE, 1.4);
+            g.poly(&[(12.0, 8.0), (9.8, 6.3), (9.8, 9.7)], BLUE);
+            g.rect(10.5, 1.5, 4.5, 13.0, Some(Color32::WHITE), Some(c));
+            g.stroke(&[(11.5, 4.0), (14.0, 4.0)], light);
+            g.stroke(&[(11.5, 11.0), (14.0, 11.0)], light);
+            g.stroke(&[(11.5, 12.5), (14.0, 12.5)], light);
+        }
+        Icon::SendDeck => {
+            // A small grid above, an arrow down, a landscape slide below.
+            g.rect(4.0, 1.0, 8.0, 5.5, None, Some(c));
+            g.stroke(&[(4.0, 3.75), (12.0, 3.75)], light);
+            g.stroke(&[(6.7, 1.0), (6.7, 6.5)], light);
+            g.stroke(&[(9.3, 1.0), (9.3, 6.5)], light);
+            g.line(&[(8.0, 6.5), (8.0, 8.5)], BLUE, 1.4);
+            g.poly(&[(8.0, 10.0), (6.3, 7.8), (9.7, 7.8)], BLUE);
+            g.rect(1.5, 10.0, 13.0, 5.0, Some(Color32::WHITE), Some(c));
+            g.stroke(&[(3.0, 11.6), (8.0, 11.6)], c);
+            g.stroke(&[(3.0, 13.4), (11.0, 13.4)], light);
+        }
+        Icon::ReceiveCraft => {
+            // A page's corner at the top-left, an arrow coming down into a grid.
+            g.rect(1.5, 1.0, 5.0, 6.0, Some(Color32::WHITE), Some(light));
+            g.stroke(&[(2.5, 3.0), (5.5, 3.0)], light);
+            g.stroke(&[(2.5, 5.0), (5.5, 5.0)], light);
+            g.line(&[(7.5, 3.0), (10.0, 3.0), (10.0, 6.0)], BLUE, 1.4);
+            g.poly(&[(10.0, 8.0), (8.3, 5.8), (11.7, 5.8)], BLUE);
+            g.rect(2.0, 8.0, 12.0, 7.0, None, Some(c));
+            g.stroke(&[(2.0, 10.3), (14.0, 10.3)], light);
+            g.stroke(&[(2.0, 12.7), (14.0, 12.7)], light);
+            g.stroke(&[(6.0, 8.0), (6.0, 15.0)], light);
+            g.stroke(&[(10.0, 8.0), (10.0, 15.0)], light);
+        }
         Icon::Appearance => {
             g.circle(8.0, 8.0, 5.5, None, Some(c));
             let half: Vec<(f32, f32)> = (0..=12)
@@ -894,6 +938,9 @@ pub const ALL: &[Icon] = &[
     Icon::OpenFolder,
     Icon::Info,
     Icon::Print,
+    Icon::SendWord,
+    Icon::SendDeck,
+    Icon::ReceiveCraft,
 ];
 
 #[cfg(test)]

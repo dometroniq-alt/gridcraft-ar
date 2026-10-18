@@ -63,6 +63,9 @@ const EXCLUDED: &[(&str, &str)] = &[
     ("insert.picture", "reads files"),
     ("pageLayout.background", "reads files"),
     ("formulas.calculationOptions", "manual and iterative calculation differ from a full recalc by design"),
+    ("send.toWordCraft", "writes files and may start another program"),
+    ("send.toDeckCraft", "writes files and may start another program"),
+    ("send.importCraftx", "opens another document"),
 ];
 
 // ---------------------------------------------------------------- deterministic randomness

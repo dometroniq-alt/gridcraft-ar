@@ -1120,6 +1120,27 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
+    sep(ui);
+    // Send (GridCraft AR): the sheet to WordCraft AR or DeckCraft AR as a Craft Exchange file
+    // (`.craftx`), and a document back from them.
+    let sw = big_button(ui, Icon::SendWord, "Send to\nWordCraft", "Send to WordCraft AR", false);
+    control_keytip(app, ui, &sw, "send.toWordCraft");
+    if sw.clicked() {
+        act(app, "send.toWordCraft", json!({}));
+    }
+    let sd = big_button(ui, Icon::SendDeck, "Send to\nDeckCraft", "Send to DeckCraft AR", false);
+    control_keytip(app, ui, &sd, "send.toDeckCraft");
+    if sd.clicked() {
+        act(app, "send.toDeckCraft", json!({}));
+    }
+    crate::rtl::vertical(ui, |ui| {
+        let rc = small_button(ui, Icon::ReceiveCraft, "Receive…", "Receive from WordCraft / DeckCraft", false);
+        control_keytip(app, ui, &rc, "send.importCraftx");
+        if rc.clicked() {
+            // Without a path the command asks for the file dialog with the Craft exchange filter.
+            act(app, "send.importCraftx", json!({}));
+        }
+    });
 }
 
 fn font_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {

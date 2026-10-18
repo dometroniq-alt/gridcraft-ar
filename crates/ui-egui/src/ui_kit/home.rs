@@ -8,7 +8,7 @@
 use egui::{Align2, Color32, Pos2, Rect, Shape, Stroke, pos2, vec2};
 
 use super::Entry;
-use super::draw::Draw;
+use super::draw::{Dir, Draw};
 
 pub const ENTRIES: &[Entry] = &[
     // ---- Clipboard ----
@@ -152,6 +152,22 @@ pub const ENTRIES: &[Entry] = &[
         "Find & Select",
         "Searches the sheet for a word or number, replaces it, jumps to a cell, or selects all cells of one kind. Example: find every «بغداد» and replace it with «البصرة».",
         |d| d.hm_find(false),
+    ),
+    // ---- Send (GridCraft AR) ----
+    Entry::new(
+        "Send to WordCraft AR",
+        "Writes the sheet (or the selected cells) as a table in a Craft exchange file and opens it in WordCraft AR, keeping the right-to-left direction, the alignment and the kashida of every cell; when WordCraft AR is not installed, the file is kept and its place is shown. Example: the sheet 'الرواتب' becomes a right-to-left table in WordCraft AR with its header row bold.",
+        |d| d.hm_send(false),
+    ),
+    Entry::new(
+        "Send to DeckCraft AR",
+        "Writes the sheet (or the selected cells) as a table in a Craft exchange file and opens it in DeckCraft AR, which puts the rows on a slide and continues on the next slides when they do not fit. Example: a sheet 'الحضور' of twenty rows arrives as three slides titled 'الحضور', 'الحضور (2)' and 'الحضور (3)'.",
+        |d| d.hm_send(true),
+    ),
+    Entry::new(
+        "Receive from WordCraft / DeckCraft",
+        "Opens a Craft exchange file (.craftx) sent by WordCraft AR or DeckCraft AR as a new workbook: every table becomes its own sheet, named by the heading above it, and the rest of the text goes down column A of a 'Text' sheet, with direction and kashida kept. Example: a report with two tables opens with the sheets 'الرواتب', 'الحضور' and 'Text'.",
+        |d| d.hm_receive(),
     ),
     // ---- Paste menu ----
     Entry::new(
@@ -2142,6 +2158,75 @@ impl Draw<'_> {
                     self.p.circle_filled(c, 1.8, self.accent());
                 }
                 self.label(pos2(dlg.min.x + 15.0, y), n, 6.5, if i == 0 { self.accent() } else { self.t.text }, Align2::LEFT_CENTER);
+            }
+        }
+    }
+    /// Send: the rows of a mini sheet fly, one after the other, into a portrait page (WordCraft)
+    /// or a landscape slide (DeckCraft), where they stack up as a table under a title line.
+    pub(super) fn hm_send(&self, slide: bool) {
+        let g = self.hm_sheet(6.0, 12.0, 70.0, 80.0, 4, 3);
+        self.hm_rows(g, 4, 3, true);
+        let area = if slide { self.page(94.0, 26.0, 78.0, 52.0) } else { self.page(104.0, 8.0, 66.0, 88.0) };
+        // The title line (the sheet's name, right-aligned: Arabic) and the table under it.
+        let title_w = area.width() * 0.5;
+        self.line(pos2(area.max.x - title_w, area.min.y + 3.0), pos2(area.max.x, area.min.y + 3.0), self.ink(), 2.5);
+        let table = Rect::from_min_max(pos2(area.min.x, area.min.y + 9.0), pos2(area.max.x, (area.min.y + 9.0 + 4.0 * 9.0).min(area.max.y)));
+        let arrow = self.reveal(0.0, 0.2);
+        if arrow > 0.0 {
+            self.arrow_right(self.at(79.0, 52.0), self.at(79.0 + 14.0 * arrow, 52.0));
+        }
+        self.hm_fly_rows(g, table, 4, 3, false);
+    }
+    /// Receive: a page's table drops into a mini sheet, row by row, and the sheet gets the
+    /// page's heading as its tab name.
+    pub(super) fn hm_receive(&self) {
+        let area = self.page(6.0, 8.0, 66.0, 88.0);
+        let title_w = area.width() * 0.5;
+        self.line(pos2(area.max.x - title_w, area.min.y + 3.0), pos2(area.max.x, area.min.y + 3.0), self.ink(), 2.5);
+        let table = Rect::from_min_max(pos2(area.min.x, area.min.y + 9.0), pos2(area.max.x, area.min.y + 9.0 + 4.0 * 9.0));
+        self.paragraph(Rect::from_min_max(pos2(area.min.x, table.max.y + 6.0), area.max), Dir::Rtl, 2, self.grey());
+        let g = self.hm_sheet(100.0, 12.0, 70.0, 68.0, 4, 3);
+        let arrow = self.reveal(0.0, 0.2);
+        if arrow > 0.0 {
+            self.arrow_right(self.at(79.0, 52.0), self.at(79.0 + 14.0 * arrow, 52.0));
+        }
+        self.hm_fly_rows(table, g, 4, 3, true);
+        if self.reveal(0.8, 0.95) >= 1.0 {
+            // The sheet tab named after the page's heading.
+            let tab = Rect::from_min_size(self.at(126.0, 83.0), vec2(42.0, 12.0));
+            self.p.rect_filled(tab, 2.0, Color32::WHITE);
+            self.p.rect_stroke(tab, 2.0, self.stroke(self.accent()), egui::StrokeKind::Inside);
+            self.label(tab.center(), "الرواتب", 6.5, self.accent(), Align2::CENTER_CENTER);
+        }
+    }
+    /// The `rows × cols` rows of `from` travel to the same rows of `to`, one after the other,
+    /// drawn as flying bands (accent frame while moving); `from_page` keeps the rows standing in
+    /// `from` until each one leaves.
+    fn hm_fly_rows(&self, from: Rect, to: Rect, rows: usize, cols: usize, from_page: bool) {
+        let fr = [0.7, 0.5, 0.62, 0.45, 0.68, 0.55];
+        for r in 0..rows {
+            let a = self.cell(from, rows, cols, r, 0).union(self.cell(from, rows, cols, r, cols.saturating_sub(1)));
+            let b = self.cell(to, rows, cols, r, 0).union(self.cell(to, rows, cols, r, cols.saturating_sub(1)));
+            let k = self.reveal(0.15 + r as f32 * 0.12, 0.5 + r as f32 * 0.12);
+            let rect = if k <= 0.0 {
+                if !from_page {
+                    continue;
+                }
+                a
+            } else {
+                Rect::from_min_max(a.min.lerp(b.min, k), a.max.lerp(b.max, k))
+            };
+            self.p.rect_filled(rect, 1.0, Color32::WHITE);
+            let frame = if k > 0.0 && k < 1.0 { self.accent() } else { self.t.border };
+            self.p.rect_stroke(rect, 1.0, self.stroke(frame), egui::StrokeKind::Inside);
+            for c in 0..cols {
+                let cell = self.cell(rect, 1, cols, 0, c);
+                let f = fr.get((r * 3 + c) % fr.len()).copied().unwrap_or(0.6);
+                if r == 0 {
+                    self.hm_tline(cell, f, self.ink(), 2.5);
+                } else {
+                    self.hm_tline(cell, f, self.grey(), 1.5);
+                }
             }
         }
     }

@@ -1064,6 +1064,13 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Use a field's menu to move it between areas:" => "استخدم قائمة الحقل لنقله بين المناطق:",
         // Kashida (justified Arabic text) — Home › Alignment.
         "Kashida" => "كشيدة",
+        // Home › Send (Craft exchange with WordCraft AR / DeckCraft AR).
+        "Send to\nWordCraft" => "إرسال إلى\nWordCraft",
+        "Send to\nDeckCraft" => "إرسال إلى\nDeckCraft",
+        "Receive…" => "استلام…",
+        "Send to WordCraft AR" => "إرسال إلى WordCraft AR",
+        "Send to DeckCraft AR" => "إرسال إلى DeckCraft AR",
+        "Receive from WordCraft / DeckCraft" => "استلام من WordCraft / DeckCraft",
         "Low" => "منخفضة",
         "Medium" => "متوسطة",
         "High" => "مرتفعة",
@@ -1771,6 +1778,15 @@ fn explain(text: &str) -> Option<&'static str> {
         }
         "Removes the conditional formatting rules — from the selected cells only, or from the whole sheet — so the cells show their ordinary colours again. Example: the red top-ten cells go back to white." => {
             "يزيل قواعد التنسيق الشرطي — من الخلايا المحددة وحدها، أو من الورقة كلها — فتعود الخلايا إلى ألوانها العادية. مثال: تعود خلايا العشرة الكبار الحمراء بيضاء."
+        }
+        "Writes the sheet (or the selected cells) as a table in a Craft exchange file and opens it in WordCraft AR, keeping the right-to-left direction, the alignment and the kashida of every cell; when WordCraft AR is not installed, the file is kept and its place is shown. Example: the sheet 'الرواتب' becomes a right-to-left table in WordCraft AR with its header row bold." => {
+            "يكتب الورقة (أو الخلايا المحددة) كجدول في ملف تبادل Craft ويفتحه في WordCraft AR، مع الحفاظ على اتجاه اليمين إلى اليسار والمحاذاة والكشيدة في كل خلية؛ وإن لم يكن WordCraft AR مثبّتًا يُحفظ الملف ويُعرض مكانه. مثال: الورقة 'الرواتب' تصبح جدولًا من اليمين إلى اليسار في WordCraft AR وصف عناوينه غامق."
+        }
+        "Writes the sheet (or the selected cells) as a table in a Craft exchange file and opens it in DeckCraft AR, which puts the rows on a slide and continues on the next slides when they do not fit. Example: a sheet 'الحضور' of twenty rows arrives as three slides titled 'الحضور', 'الحضور (2)' and 'الحضور (3)'." => {
+            "يكتب الورقة (أو الخلايا المحددة) كجدول في ملف تبادل Craft ويفتحه في DeckCraft AR الذي يضع الصفوف على شريحة ويتابع على الشرائح التالية حين لا تتسع لها. مثال: ورقة 'الحضور' ذات عشرين صفًا تصل ثلاث شرائح بعناوين 'الحضور' و'الحضور (2)' و'الحضور (3)'."
+        }
+        "Opens a Craft exchange file (.craftx) sent by WordCraft AR or DeckCraft AR as a new workbook: every table becomes its own sheet, named by the heading above it, and the rest of the text goes down column A of a 'Text' sheet, with direction and kashida kept. Example: a report with two tables opens with the sheets 'الرواتب', 'الحضور' and 'Text'." => {
+            "يفتح ملف تبادل Craft (.craftx) أرسله WordCraft AR أو DeckCraft AR كمصنف جديد: كل جدول يصبح ورقة خاصة به تحمل اسم العنوان الذي فوقه، وبقية النص تنزل في العمود A من ورقة 'Text' مع الحفاظ على الاتجاه والكشيدة. مثال: تقرير فيه جدولان يُفتح بأوراق 'الرواتب' و'الحضور' و'Text'."
         }
         _ => return None,
     })

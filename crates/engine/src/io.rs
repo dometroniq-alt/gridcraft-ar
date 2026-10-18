@@ -19,6 +19,9 @@ pub enum FileKind {
     Tsv,
     Json,
     Html,
+    /// Craft Exchange (`.craftx`): the hand-off format shared with WordCraft AR and DeckCraft AR
+    /// (`crate::craftx`). Read as a workbook; written as one table of the active sheet.
+    Craftx,
 }
 
 impl FileKind {
@@ -33,6 +36,7 @@ impl FileKind {
             "tsv" | "tab" | "txt" => FileKind::Tsv,
             "json" | "scjson" => FileKind::Json,
             "html" | "htm" => FileKind::Html,
+            "craftx" => FileKind::Craftx,
             _ => return None,
         })
     }
@@ -144,6 +148,11 @@ fn open_plain(name: &str, bytes: &[u8]) -> Result<(Workbook, Vec<String>)> {
         return Ok((wb, report.warnings));
     }
     match kind {
+        Some(FileKind::Craftx) => {
+            let text = String::from_utf8_lossy(bytes);
+            let wb = crate::craftx::read(&text).map_err(|e| EngineError::Other(format!("We can't open '{name}': {e}")))?;
+            Ok((wb, vec![]))
+        }
         Some(FileKind::Json) => {
             let mut wb: Workbook = serde_json::from_slice(bytes).map_err(|e| EngineError::Other(format!("not a GridCraft JSON workbook: {e}")))?;
             wb.styles.rebuild_index();
@@ -189,7 +198,7 @@ pub fn save_bytes(wb: &Workbook, path: &str) -> Result<Vec<u8>> {
     // a typo like `.cvs` would otherwise produce a file no other app recognises.
     let Some(kind) = FileKind::from_path(path) else {
         let name = std::path::Path::new(path).file_name().and_then(|n| n.to_str()).unwrap_or(path);
-        return Err(EngineError::Other(format!("{name}: unknown file format. Save as .xlsx, .csv, .tsv, .json or .html.")));
+        return Err(EngineError::Other(format!("{name}: unknown file format. Save as .xlsx, .csv, .tsv, .json, .html or .craftx.")));
     };
     save_bytes_as(wb, path, kind)
 }
@@ -211,6 +220,10 @@ pub fn save_bytes_as(wb: &Workbook, path: &str, kind: FileKind) -> Result<Vec<u8
         FileKind::Tsv => wb.sheet(sheet).map(|sh| csv(wb, sh, b'\t')).transpose().map(Option::unwrap_or_default),
         FileKind::Json => serde_json::to_vec_pretty(wb).map_err(|e| EngineError::Other(e.to_string())),
         FileKind::Html => to_html(wb, sheet).map(String::into_bytes),
+        FileKind::Craftx => {
+            let title = std::path::Path::new(path).file_stem().and_then(|n| n.to_str()).unwrap_or("Book");
+            crate::craftx::write(wb, sheet, None, title).map(String::into_bytes)
+        }
     }
 }
 

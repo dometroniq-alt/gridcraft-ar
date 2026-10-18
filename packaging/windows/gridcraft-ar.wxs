@@ -188,6 +188,8 @@
         <RegistryValue Root="HKLM" Key="Software\Classes\.ods\OpenWithProgids" Name="GridCraftAR.Workbook" Value="GridCraftAR.Workbook" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\.csv\OpenWithProgids" Name="GridCraftAR.TextData" Value="GridCraftAR.TextData" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\.tsv\OpenWithProgids" Name="GridCraftAR.TextData" Value="GridCraftAR.TextData" Type="string" />
+        <!-- .craftx: a Craft Exchange document from WordCraft AR / DeckCraft AR (docs/ar-exchange.md). -->
+        <RegistryValue Root="HKLM" Key="Software\Classes\.craftx\OpenWithProgids" Name="GridCraftAR.Workbook" Value="GridCraftAR.Workbook" Type="string" />
 
         <!-- Settings > Default apps: lets the user pick GridCraft for these types. -->
         <RegistryValue Root="HKLM" Key="Software\GridCraft AR\Capabilities" Name="ApplicationName" Value="GridCraft AR" Type="string" />

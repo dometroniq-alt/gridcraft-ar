@@ -24,6 +24,8 @@
 > interface (right-to-left layout, 990+ translated strings, embedded Noto Sans Arabic), Arabic workbooks by default,
 > kashida justification in cells, and visual help (a drawn, animated thumbnail and a plain-words example for every
 > ribbon button and menu item, in English and Arabic). It installs beside GridCraft, not over it.
+> Home › Send hands a sheet to WordCraft AR or DeckCraft AR, and receives a document from them, through the
+> Craft Exchange format (`.craftx`, [docs/ar-exchange.md](docs/ar-exchange.md)) that keeps direction, alignment and kashida.
 > Branch `ar-main`; releases: [Releases](https://github.com/dometroniq-alt/gridcraft-ar/releases) ·
 > [README in Arabic](README.ar.md) · [Releasing](#releasing-gridcraft-ar).
 > Everything that makes this a spreadsheet is GridCraft, by the ArtCraft team and the GridCraft contributors

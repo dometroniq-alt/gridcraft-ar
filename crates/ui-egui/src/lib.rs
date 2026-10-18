@@ -178,6 +178,9 @@ pub struct Services {
     /// Desktop: submit the PDF with the chosen settings on a worker.
     pub print_native: Option<printing::Submit>,
     pub pick_open: Option<Box<dyn Fn() -> Option<String>>>,
+    /// Desktop: the open dialog filtered to Craft Exchange files (`.craftx`, Home › Send ›
+    /// Receive…). Without it `pick_open` is used, whose filters include `.craftx` too.
+    pub pick_craftx: Option<Box<dyn Fn() -> Option<String>>>,
     pub pick_save: Option<Box<dyn Fn(&str) -> Option<String>>>,
     /// Native picture picker (PNG/JPEG), separate from workbook opening.
     pub pick_picture: Option<Box<dyn Fn() -> Option<String>>>,
@@ -764,8 +767,14 @@ impl SheetApp {
         }
         match name {
             "open" => {
+                // `{"filter": "craftx"}` (Home › Send › Receive…) asks for the Craft Exchange filter.
+                let craftx = params.get("filter").and_then(Json::as_str) == Some(gridcraft_engine::craftx::EXTENSION);
                 if let Some(start) = &self.services.open_async {
                     start();
+                } else if craftx && let Some(pick) = &self.services.pick_craftx {
+                    if let Some(path) = pick() {
+                        self.open_path(&path);
+                    }
                 } else if let Some(pick) = &self.services.pick_open
                     && let Some(path) = pick()
                 {

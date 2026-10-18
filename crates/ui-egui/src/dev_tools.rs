@@ -68,6 +68,9 @@ pub const INVENTORY: &[(&str, &str, Option<Icon>)] = &[
     ("home", "Clear", Some(Icon::Eraser)),
     ("home", "Sort & Filter", Some(Icon::SortFilter)),
     ("home", "Find & Select", Some(Icon::Find)),
+    ("home", "Send to WordCraft AR", Some(Icon::SendWord)),
+    ("home", "Send to DeckCraft AR", Some(Icon::SendDeck)),
+    ("home", "Receive from WordCraft / DeckCraft", Some(Icon::ReceiveCraft)),
     ("insert", "PivotTable", Some(Icon::PivotTable)),
     ("insert", "Table (⌘T)", Some(Icon::Table)),
     ("insert", "Insert a picture", Some(Icon::Picture)),
@@ -283,8 +286,20 @@ impl Report {
     }
 }
 
-/// Commands the self-test leaves out: they touch files on disk or close the scratch workbook.
-const SKIPPED: &[&str] = &["file.close", "file.open", "file.save", "file.saveAs", "file.exportCsv", "file.exportHtml", "insert.picture"];
+/// Commands the self-test leaves out: they touch files on disk, close the scratch workbook, or
+/// (Home › Send) would start WordCraft AR / DeckCraft AR on this machine.
+const SKIPPED: &[&str] = &[
+    "file.close",
+    "file.open",
+    "file.save",
+    "file.saveAs",
+    "file.exportCsv",
+    "file.exportHtml",
+    "insert.picture",
+    "send.toWordCraft",
+    "send.toDeckCraft",
+    "send.importCraftx",
+];
 
 /// The scratch workbook the self-test works on: the sales sample, in a session of its own.
 pub fn scratch_session() -> gridcraft_engine::Session {
