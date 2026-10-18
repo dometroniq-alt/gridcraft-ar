@@ -393,6 +393,7 @@ pub fn font_definitions_with(language: crate::i18n::Language, used: &[String]) -
     // The non-Latin fallback faces have to sit at the end of each chain: a Latin font owns Latin,
     // and epaint picks the first face that has the glyph, so they only catch their own scripts.
     let fallback = load_fallback(&mut fonts, HanOrder::of(language));
+    let arabic = load_arabic(&mut fonts);
     for role in [UI, UI_BOLD, CELL, CELL_BOLD, CELL_ITALIC, CELL_BOLD_ITALIC, SERIF, MONO] {
         let paths = candidates(role);
         let refs: Vec<(&str, u32)> = paths.iter().map(|(p, i)| (p.as_str(), *i)).collect();
@@ -407,6 +408,9 @@ pub fn font_definitions_with(language: crate::i18n::Language, used: &[String]) -
             chain.push(format!("sys-{CELL}"));
         }
         chain.extend(if role == MONO { base_mono.clone() } else { base_prop.clone() });
+        // GridCraft AR: the embedded Arabic face right after the Latin ones, so Arabic labels and
+        // cell text are shaped and joined by one Arabic font wherever the app runs.
+        chain.push(arabic.for_role(role).to_string());
         chain.extend(fallback.iter().cloned());
         chain.retain(|k| fonts.font_data.contains_key(k));
         fonts.families.insert(FontFamily::Name(role.into()), chain);
@@ -472,6 +476,45 @@ fn load_fallback(fonts: &mut FontDefinitions, han: HanOrder) -> Vec<String> {
 #[cfg(target_arch = "wasm32")]
 fn load_fallback(_fonts: &mut FontDefinitions, _han: HanOrder) -> Vec<String> {
     Vec::new()
+}
+
+/// Font-data key of the embedded Arabic interface face (Noto Sans Arabic Regular).
+pub const ARABIC: &str = "ar-ui";
+/// Font-data key of the embedded Arabic bold face (Noto Sans Arabic SemiBold).
+pub const ARABIC_BOLD: &str = "ar-ui-bold";
+
+/// The embedded Arabic faces, by key, once [`load_arabic`] has put them in the font data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ArabicFaces {
+    regular: &'static str,
+    bold: &'static str,
+}
+
+impl ArabicFaces {
+    /// The Arabic face that pairs with a role: the SemiBold behind the bold roles, Regular behind
+    /// the rest.
+    pub(crate) fn for_role(self, role: &str) -> &'static str {
+        if role == UI_BOLD || role == CELL_BOLD || role == CELL_BOLD_ITALIC { self.bold } else { self.regular }
+    }
+}
+
+/// GridCraft AR: embeds Noto Sans Arabic (OFL, `assets/fonts/`, attributed in ATTRIBUTION.md) so
+/// Arabic interface labels and Arabic cell text render joined and legible on every machine,
+/// including WASM and a Windows or Linux box without an Arabic system font. The face carries no
+/// Latin letters or ASCII digits, so behind a Latin face it only ever draws Arabic. The files
+/// ship with the binary and are known to parse; the parse check still runs so a damaged build
+/// loses a face, never the app.
+fn load_arabic(fonts: &mut FontDefinitions) -> ArabicFaces {
+    const REGULAR: &[u8] = include_bytes!("../../../assets/fonts/NotoSansArabic-Regular.ttf");
+    const SEMIBOLD: &[u8] = include_bytes!("../../../assets/fonts/NotoSansArabic-SemiBold.ttf");
+    for (key, bytes) in [(ARABIC, REGULAR), (ARABIC_BOLD, SEMIBOLD)] {
+        if font_parses(bytes, 0) {
+            fonts.font_data.insert(key.to_string(), Arc::new(FontData::from_static(bytes)));
+        } else {
+            log::warn!("embedded Arabic face {key} did not parse; Arabic text falls back to the system faces");
+        }
+    }
+    ArabicFaces { regular: ARABIC, bold: ARABIC_BOLD }
 }
 
 /// Every fallback face we look for, in chain order: `(key, candidate files)`. One file per script
@@ -822,7 +865,7 @@ mod tests {
             ["sys-cjk-han-zh", "sys-cjk-han-ja", "sys-cjk-hangul", "sys-thai", "sys-hebrew", "sys-symbols", "sys-symbols-2"]
         );
         assert_eq!(HanOrder::of(Language::Ja), HanOrder::Japanese);
-        for l in [Language::En, Language::Zh, Language::Ko, Language::Ru, Language::PtBr, Language::De, Language::Cs] {
+        for l in [Language::En, Language::Zh, Language::Ko, Language::Ru, Language::PtBr, Language::De, Language::Cs, Language::Ar] {
             assert_eq!(HanOrder::of(l), HanOrder::Chinese, "{l:?} shares the default order (no font rebuild)");
         }
     }
@@ -885,6 +928,40 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn embedded_arabic_face_renders_arabic_in_every_family() {
+        // GridCraft AR: the Arabic face ships with the binary, so this holds on every machine: the
+        // interface, bold interface and cell families all draw Arabic letters as real glyphs (not
+        // tofu), and the face sits after the Latin faces and before the system script fallbacks.
+        let fonts = font_definitions_for_language(Language::Ar);
+        assert!(fonts.font_data.contains_key(ARABIC) && fonts.font_data.contains_key(ARABIC_BOLD));
+        let fb: Vec<String> = fallback_faces(HanOrder::Chinese).into_iter().map(|(k, _)| k.to_string()).collect();
+        for role in [UI, UI_BOLD, CELL, CELL_BOLD, CELL_ITALIC, CELL_BOLD_ITALIC, SERIF, MONO] {
+            let chain = fonts.families.get(&FontFamily::Name(role.into())).cloned().unwrap_or_default();
+            let want = if role == UI_BOLD || role == CELL_BOLD || role == CELL_BOLD_ITALIC { ARABIC_BOLD } else { ARABIC };
+            let at = chain.iter().position(|k| k == want).unwrap_or(usize::MAX);
+            assert!(at != usize::MAX, "{role} lacks the Arabic face: {chain:?}");
+            assert!(at > 0, "{role}: a Latin face must lead the chain");
+            let first_fb = chain.iter().position(|k| fb.contains(k)).unwrap_or(chain.len());
+            assert!(at < first_fb, "{role}: the Arabic face must precede the system script faces");
+        }
+        let ctx = egui::Context::default();
+        ctx.set_fonts(fonts);
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_ui| {});
+        out.textures_delta.clear();
+        for family in [FontFamily::Proportional, FontFamily::Name(UI_BOLD.into()), FontFamily::Name(CELL.into()), FontFamily::Name(CELL_BOLD.into())]
+        {
+            let font = FontId::new(14.0, family);
+            let glyphs = |text: &str| {
+                let galley = ctx.fonts_mut(|f| f.layout_no_wrap(text.to_owned(), font.clone(), Color32::BLACK));
+                galley.rows.iter().flat_map(|r| r.glyphs.iter().filter(|g| g.chr != ' ').map(|g| g.uv_rect)).collect::<Vec<_>>()
+            };
+            let tofu = glyphs("\u{25FB}");
+            let drawn = glyphs("الشريط الرئيسي تنسيق شرطي");
+            assert!(!drawn.is_empty() && drawn.iter().all(|g| !tofu.contains(g)), "Arabic renders as tofu in {:?}", font.family);
         }
     }
 

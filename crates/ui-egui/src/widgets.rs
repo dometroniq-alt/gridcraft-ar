@@ -24,7 +24,7 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, color: Color32, tip: &str, size: egu
         ui.painter().rect_filled(rect, 4.0, t.hover);
     }
     icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, color);
-    resp.on_hover_text(tr(ui, tip))
+    crate::ui_kit::tooltip::tooltip(ui, resp, tip, tip)
 }
 
 /// A toggle-able small button (e.g. Bold) showing a checked state.
@@ -38,7 +38,7 @@ pub fn toggle_button(ui: &mut Ui, icon: Icon, on: bool, tip: &str) -> Response {
         ui.painter().rect_filled(rect, 4.0, t.hover);
     }
     icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(16.0, 16.0)), icon, t.text);
-    resp.on_hover_text(tr(ui, tip))
+    crate::ui_kit::tooltip::tooltip(ui, resp, tip, tip)
 }
 
 /// Large ribbon button: 32px icon over a one- or two-line label.
@@ -73,7 +73,7 @@ pub fn big_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: boo
             );
         }
     }
-    resp.on_hover_text(tr(ui, tip))
+    crate::ui_kit::tooltip::tooltip(ui, resp, tip, tip)
 }
 
 /// Small ribbon button: 16px icon with optional label to the right.
@@ -89,19 +89,22 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: b
     } else if resp.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);
     }
-    icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 12.0, rect.center().y), vec2(16.0, 16.0)), icon, t.text);
+    // GridCraft AR: the icon stands at the start edge, the label after it and the chevron at the
+    // end edge — the right end first in a right-to-left interface.
+    let ctx = ui.ctx().clone();
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(crate::rtl::start_x(&ctx, rect, 12.0), rect.center().y), vec2(16.0, 16.0)), icon, t.text);
     if !label.is_empty() {
-        ui.painter().text(pos2(rect.left() + 24.0, rect.center().y), Align2::LEFT_CENTER, label, font, t.text);
+        ui.painter().text(pos2(crate::rtl::start_x(&ctx, rect, 24.0), rect.center().y), crate::rtl::start_center(&ctx), label, font, t.text);
     }
     if dropdown {
         icons::paint(
             ui.painter(),
-            Rect::from_center_size(pos2(rect.right() - 7.0, rect.center().y + 1.0), vec2(10.0, 10.0)),
+            Rect::from_center_size(pos2(crate::rtl::end_x(&ctx, rect, 7.0), rect.center().y + 1.0), vec2(10.0, 10.0)),
             Icon::Chevron,
             t.text_dim,
         );
     }
-    resp.on_hover_text(tr(ui, tip))
+    crate::ui_kit::tooltip::tooltip(ui, resp, tip, tip)
 }
 
 /// A split button: main part runs the default action, the arrow opens a menu.
@@ -109,20 +112,23 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: b
 pub fn split_button(ui: &mut Ui, icon: Icon, accent: Option<Color32>, tip: &str) -> (bool, Response) {
     let t = Tokens::get(ui.ctx());
     let (rect, _) = ui.allocate_exact_size(vec2(38.0, 24.0), Sense::hover());
-    let main = Rect::from_min_size(rect.min, vec2(25.0, 24.0));
-    let arrow = Rect::from_min_max(pos2(main.right(), rect.top()), rect.max);
+    // GridCraft AR: the main part at the start edge, the arrow at the end edge (mirrored in a
+    // right-to-left interface).
+    let main = crate::rtl::mirror_x(ui.ctx(), Rect::from_min_size(rect.min, vec2(25.0, 24.0)), rect);
+    let arrow = crate::rtl::mirror_x(ui.ctx(), Rect::from_min_max(pos2(rect.left() + 25.0, rect.top()), rect.max), rect);
     let m = ui.interact(main, ui.id().with((tip, "main")), Sense::click());
     let a = ui.interact(arrow, ui.id().with((tip, "arrow")), Sense::click());
     if m.hovered() || a.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);
-        ui.painter().line_segment([pos2(main.right(), rect.top() + 3.0), pos2(main.right(), rect.bottom() - 3.0)], Stroke::new(1.0, t.separator));
+        let split = crate::rtl::end_x(ui.ctx(), main, 0.0);
+        ui.painter().line_segment([pos2(split, rect.top() + 3.0), pos2(split, rect.bottom() - 3.0)], Stroke::new(1.0, t.separator));
     }
     icons::paint(ui.painter(), Rect::from_center_size(main.center() - vec2(0.0, 2.0), vec2(16.0, 16.0)), icon, t.text);
     if let Some(c) = accent {
         ui.painter().rect_filled(Rect::from_min_size(pos2(main.left() + 4.0, main.bottom() - 5.0), vec2(17.0, 3.0)), 0.0, c);
     }
     icons::paint(ui.painter(), Rect::from_center_size(arrow.center(), vec2(10.0, 10.0)), Icon::Chevron, t.text_dim);
-    (m.on_hover_text(tr(ui, tip)).clicked(), a)
+    (crate::ui_kit::tooltip::tooltip(ui, m, tip, tip).clicked(), a)
 }
 
 /// A one-line text field for a value stored in the workbook, which callers reload every frame. The text being typed is

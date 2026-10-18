@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+mod ar;
 mod cs;
 mod de;
 mod es;
@@ -35,10 +36,13 @@ pub enum Language {
     Cs,
     Fr,
     Sr,
+    /// WordCraft AR / GridCraft AR: Arabic, with a right-to-left interface.
+    Ar,
 }
 
 impl Language {
-    pub const ALL: [Self; 11] = [Self::En, Self::Es, Self::Zh, Self::Ja, Self::Ko, Self::Ru, Self::PtBr, Self::De, Self::Cs, Self::Fr, Self::Sr];
+    pub const ALL: [Self; 12] =
+        [Self::En, Self::Ar, Self::Es, Self::Zh, Self::Ja, Self::Ko, Self::Ru, Self::PtBr, Self::De, Self::Cs, Self::Fr, Self::Sr];
 
     /// The language's own name, shown in the switcher.
     pub fn name(self) -> &'static str {
@@ -54,6 +58,7 @@ impl Language {
             Self::Cs => "Čeština",
             Self::Fr => "Français",
             Self::Sr => "Srpski",
+            Self::Ar => "العربية",
         }
     }
 
@@ -71,6 +76,7 @@ impl Language {
             Self::Cs => "cs",
             Self::Fr => "fr",
             Self::Sr => "sr",
+            Self::Ar => "ar",
         }
     }
 
@@ -91,6 +97,7 @@ impl Language {
             "cs" => Some(Self::Cs),
             "fr" => Some(Self::Fr),
             "sr" => Some(Self::Sr),
+            "ar" => Some(Self::Ar),
             _ => None,
         }
     }
@@ -129,6 +136,7 @@ impl Language {
             Self::Cs => cs::translate(text),
             Self::Fr => fr::translate(text),
             Self::Sr => sr::translate(text),
+            Self::Ar => ar::translate(text),
         };
         translated.unwrap_or_else(|| text.rsplit_once('|').map_or(text, |(_, label)| label))
     }
@@ -647,6 +655,71 @@ mod tests {
         assert_eq!(Language::parse("xx"), None);
     }
 
+    /// GridCraft AR: the Arabic catalog covers every key of every other catalog (the German one
+    /// first, then the rest and the Japanese table), so no label an Arabic user sees falls back
+    /// to English because a translation exists for another language but not theirs.
+    #[test]
+    fn arabic_translates_every_key_of_the_other_catalogs() {
+        // The catalogs are `match` arms; read their keys from the source (test only).
+        fn keys(source: &str) -> Vec<String> {
+            source
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim_start();
+                    let rest = line.strip_prefix('"')?;
+                    let (key, after) = split_literal(rest)?;
+                    after.trim_start().starts_with("=>").then_some(key)
+                })
+                .collect()
+        }
+        /// The literal up to its closing quote, unescaped, and what follows it.
+        fn split_literal(rest: &str) -> Option<(String, &str)> {
+            let mut key = String::new();
+            let mut chars = rest.char_indices();
+            while let Some((i, c)) = chars.next() {
+                match c {
+                    '\\' => match chars.next()?.1 {
+                        'n' => key.push('\n'),
+                        't' => key.push('\t'),
+                        other => key.push(other),
+                    },
+                    '"' => return Some((key, &rest[i + 1..])),
+                    c => key.push(c),
+                }
+            }
+            None
+        }
+        let catalogs = [
+            ("German", include_str!("i18n/de.rs")),
+            ("Spanish", include_str!("i18n/es.rs")),
+            ("French", include_str!("i18n/fr.rs")),
+            ("Czech", include_str!("i18n/cs.rs")),
+            ("Korean", include_str!("i18n/ko.rs")),
+            ("Portuguese", include_str!("i18n/pt.rs")),
+            ("Russian", include_str!("i18n/ru.rs")),
+            ("Serbian", include_str!("i18n/sr.rs")),
+            ("Chinese", include_str!("i18n/zh.rs")),
+        ];
+        let german = keys(catalogs[0].1);
+        assert!(german.len() > 300, "the German catalog was read: {} keys", german.len());
+        assert!(german.iter().any(|k| k == "Page Layout|Orientation"), "context keys are read as written");
+        for (name, source) in catalogs {
+            for key in keys(source) {
+                assert!(ar::translate(&key).is_some_and(|t| !t.is_empty()), "missing Arabic for {name} key {key:?}");
+            }
+        }
+        for (english, _) in JAPANESE {
+            assert!(ar::translate(english).is_some_and(|t| !t.is_empty()), "missing Arabic for Japanese key {english:?}");
+        }
+        assert_eq!(Language::Ar.tr("Data"), "بيانات");
+        assert_eq!(Language::Ar.tr("Freeze Panes"), "تجميد الأجزاء");
+        assert_eq!(Language::Ar.tr("Page Layout|Orientation"), "اتجاه الصفحة");
+        assert_eq!(Language::Ar.tr("Sheet1!A1"), "Sheet1!A1");
+        assert_eq!(Language::Ar.tr("Cut (⌘X)"), "قص (⌘X)", "shortcuts stay as in the source");
+        assert_eq!(Language::Ar.formula_locale(), gridcraft_engine::formula::FormulaLocale::En);
+        assert!(Language::ALL.contains(&Language::Ar));
+    }
+
     #[test]
     fn unknown_saved_language_keeps_the_other_preferences() {
         let ui: crate::UiState = serde_json::from_str(r#"{"dark": true, "language": "xx"}"#).unwrap();
@@ -685,6 +758,9 @@ mod tests {
         assert_eq!(Language::from_tag("sr-Latn-RS"), Some(Language::Sr));
         assert_eq!(Language::from_tag("sr-RS"), Some(Language::Sr));
         assert_eq!(Language::parse("sr"), Some(Language::Sr));
+        assert_eq!(Language::from_tag("ar-IQ"), Some(Language::Ar));
+        assert_eq!(Language::from_tag("ar_SA.UTF-8"), Some(Language::Ar));
+        assert_eq!(Language::parse("ar"), Some(Language::Ar));
     }
 
     #[test]

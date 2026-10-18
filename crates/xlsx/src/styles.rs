@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use gridcraft_model::style::Protection;
+use gridcraft_model::style::{KashidaLevel, Protection};
 use gridcraft_model::{
     Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, HAlign, NumFmt, PatternType, Style, Underline, VAlign, VertAlign, Workbook,
 };
@@ -251,6 +251,7 @@ fn read_alignment(a: &El) -> Alignment {
         shrink: a.flag("shrinkToFit", false),
         indent: a.attr_u32("indent").unwrap_or(0).min(250) as u8,
         rotation: 0,
+        kashida: KashidaLevel::Off,
     };
     if let Some(r) = a.attr_i64("textRotation") {
         al.rotation = match r {
@@ -295,6 +296,8 @@ fn read_xf(xf: &El, fonts: &[Font], fills: &[Fill], borders: &[Borders], fmts: &
     if let Some(a) = xf.child("alignment") {
         s.align = read_alignment(a);
     }
+    // GridCraft AR's kashida level rides in an `extLst` extension of its own (Excel ignores it).
+    s.align.kashida = read_kashida_ext(xf);
     if let Some(p) = xf.child("protection") {
         s.protection = read_protection(p);
     }
@@ -488,8 +491,35 @@ fn border_xml(b: &Borders) -> String {
     s
 }
 
+/// `ext` URI of GridCraft's kashida-level extension on an `xf` (a GUID of our own; Excel skips
+/// extensions it does not know, so the file still opens as plain Justify / Distributed there).
+pub const KASHIDA_EXT_URI: &str = "{7B1E6C2A-4D3F-4F8B-9A61-5C0E2D8F3A17}";
+/// Namespace of the `kashida` element inside that extension.
+pub const KASHIDA_NS: &str = "urn:gridcraft:spreadsheetml:kashida";
+
+/// The `ext` element (for an `xf`'s `extLst`) that stores a kashida level; `None` for `Off`.
+fn kashida_ext(level: KashidaLevel) -> Option<String> {
+    if level == KashidaLevel::Off {
+        return None;
+    }
+    Some(format!("<ext uri=\"{KASHIDA_EXT_URI}\" xmlns:gck=\"{KASHIDA_NS}\"><gck:kashida level=\"{}\"/></ext>", level.as_str()))
+}
+
+/// The kashida level an `xf`'s `extLst` carries (`Off` when none, or when the level is unknown).
+fn read_kashida_ext(xf: &El) -> KashidaLevel {
+    let Some(ext) = xf.child("extLst") else { return KashidaLevel::Off };
+    ext.kids("ext")
+        .filter(|e| e.attr("uri").is_some_and(|u| u.eq_ignore_ascii_case(KASHIDA_EXT_URI)))
+        .filter_map(|e| e.child("kashida"))
+        .filter_map(|k| k.attr("level"))
+        .find_map(KashidaLevel::parse)
+        .unwrap_or_default()
+}
+
 fn alignment_xml(a: &Alignment) -> Option<String> {
-    if *a == Alignment::default() {
+    // The kashida level is not an `alignment` attribute (see `kashida_ext`).
+    let plain = Alignment { kashida: KashidaLevel::Off, ..*a };
+    if plain == Alignment::default() {
         return None;
     }
     let mut s = String::from("<alignment");
@@ -622,14 +652,22 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
         if pr.is_some() {
             xfs.push_str(" applyProtection=\"1\"");
         }
-        if al.is_none() && pr.is_none() && !checkbox {
+        let kashida = kashida_ext(st.align.kashida);
+        if al.is_none() && pr.is_none() && !checkbox && kashida.is_none() {
             xfs.push_str("/>");
         } else {
             xfs.push('>');
             xfs.push_str(&al.unwrap_or_default());
             xfs.push_str(&pr.unwrap_or_default());
-            if checkbox {
-                xfs.push_str(&crate::feature_bags::checkbox_xf_ext());
+            if checkbox || kashida.is_some() {
+                xfs.push_str("<extLst>");
+                if checkbox {
+                    // `checkbox_xf_ext` comes wrapped in its own `extLst`; both extensions share one.
+                    let ext = crate::feature_bags::checkbox_xf_ext();
+                    xfs.push_str(ext.trim_start_matches("<extLst>").trim_end_matches("</extLst>"));
+                }
+                xfs.push_str(&kashida.unwrap_or_default());
+                xfs.push_str("</extLst>");
             }
             xfs.push_str("</xf>");
         }

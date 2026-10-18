@@ -1180,17 +1180,48 @@ pub(crate) fn paint_quadrant(
         let pad = 2.5 * z;
         let rotated = st.align.rotation != 0 && st.align.rotation != 255;
         // Rotated text wraps along its own direction (below), not across the column width.
-        if !rotated && (st.align.wrap || st.align.h == HAlign::Justify) {
+        // Justify and Distributed wrap like Wrap Text does.
+        let fills = matches!(st.align.h, HAlign::Justify | HAlign::Distributed);
+        if !rotated && (st.align.wrap || fills) {
+            // GridCraft AR: Arabic text fills its lines with kashida (tatweel at the letter
+            // joints, a share of the slack by the cell's kashida level) and widened spaces; each
+            // line is its own galley in visual order, so a right-to-left paragraph wraps in
+            // reading order and its unfilled last line sits at the right margin (indent too).
+            if fills
+                && crate::kashida::has_arabic(&text)
+                && let Some(share) = crate::kashida::share(st.align.h, st.align.kashida)
+            {
+                let rtl_text = crate::kashida::is_rtl(&text);
+                let (left, right) =
+                    if rtl_text { (text_left + pad, rect.right() - pad - indent) } else { (text_left + pad + indent, rect.right() - pad) };
+                let width = (right - left).max(4.0);
+                let mut measure = |s: &str| p.layout_no_wrap(s.to_string(), font.clone(), Color32::PLACEHOLDER).size().x;
+                let lines = crate::kashida::layout(&text, width, share, crate::kashida::stretches_last(st.align.h), &mut measure);
+                let galleys: Vec<_> = lines.iter().map(|l| p.layout_job(crate::kashida::line_job(l, font.clone(), color))).collect();
+                let total_h: f32 = galleys.iter().map(|g| g.size().y).sum();
+                let mut y = wrapped_cell_text_y(st.align.v, *rect, total_h, z);
+                let cp = p.with_clip_rect(rect.intersect(p.clip_rect()));
+                for (line, galley) in lines.iter().zip(galleys) {
+                    let x = if line.filled || !line.rtl { left } else { right - galley.size().x };
+                    let h = galley.size().y;
+                    cp.galley(pos2(x, y), galley, color);
+                    y += h;
+                }
+                continue;
+            }
             let wrap_w = (rect.width() - 2.0 * pad - indent).max(4.0);
             let mut job = egui::text::LayoutJob::simple(text.clone(), font.clone(), color, wrap_w);
+            // Justified Latin text fills its lines the way egui can (wider spaces, letter spacing).
+            job.justify = fills;
+            // (A distributed line egui leaves unfilled — the last — sits centred, as before.)
             job.halign = match halign {
-                HAlign::Center | HAlign::CenterAcross => egui::Align::Center,
+                HAlign::Center | HAlign::CenterAcross | HAlign::Distributed => egui::Align::Center,
                 HAlign::Right => egui::Align::RIGHT,
                 _ => egui::Align::LEFT,
             };
             let galley = p.layout_job(job);
             let x = match halign {
-                HAlign::Center | HAlign::CenterAcross => rect.center().x,
+                HAlign::Center | HAlign::CenterAcross | HAlign::Distributed => rect.center().x,
                 HAlign::Right => rect.right() - pad,
                 _ => text_left + pad + indent,
             };

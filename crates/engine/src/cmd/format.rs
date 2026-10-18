@@ -91,6 +91,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!("home.alignCenter", "Center", ["Home", "Alignment"], Some("Cmd+E"), "{range?}", has_doc, |s, p| halign(s, p, HAlign::Center)),
         cmd!("home.alignRight", "Align Right", ["Home", "Alignment"], None, "{range?}", has_doc, |s, p| halign(s, p, HAlign::Right)),
         cmd!("home.justify", "Justify", ["Home", "Alignment"], None, "{range?}", has_doc, |s, p| halign(s, p, HAlign::Justify)),
+        cmd!("home.kashida", "Kashida", ["Home", "Alignment"], None, "{range?, level: off|low|medium|high}", has_doc, kashida),
         cmd!("home.alignTop", "Top Align", ["Home", "Alignment"], None, "{range?}", has_doc, |s, p| valign(s, p, VAlign::Top)),
         cmd!("home.alignMiddle", "Middle Align", ["Home", "Alignment"], None, "{range?}", has_doc, |s, p| valign(s, p, VAlign::Center)),
         cmd!("home.alignBottom", "Bottom Align", ["Home", "Alignment"], None, "{range?}", has_doc, |s, p| valign(s, p, VAlign::Bottom)),
@@ -525,6 +526,17 @@ fn halign(s: &mut Session, p: &Json, a: HAlign) -> Result<Json> {
     let cur = active_style(s)?.align.h;
     let a = if cur == a && p.get("on").is_none() { HAlign::General } else { a };
     apply_style(s, p, |st| st.align.h = a)
+}
+
+/// GridCraft AR: how much of a justified Arabic line's slack lengthens letter joints (kashida)
+/// instead of widening spaces. The level is kept in the cell style; `Justify` / `Distributed`
+/// alignment decides whether it applies (see the grid's text layout).
+fn kashida(s: &mut Session, p: &Json) -> Result<Json> {
+    let level = match str_param(p, "level") {
+        Some(l) => gridcraft_model::style::KashidaLevel::parse(l).ok_or_else(|| bad("home.kashida", "`level` is off, low, medium or high"))?,
+        None => return Err(bad("home.kashida", "missing `level` (off, low, medium or high)")),
+    };
+    apply_style(s, p, |st| st.align.kashida = level)
 }
 
 fn valign(s: &mut Session, p: &Json, a: VAlign) -> Result<Json> {
@@ -1135,6 +1147,33 @@ mod tests {
         assert_eq!(v(&mut s, "B1"), Json::Null);
         assert_eq!(v(&mut s, "B2"), Json::Null);
         assert_eq!(v(&mut s, "D1"), json!(4.0));
+    }
+
+    #[test]
+    fn kashida_level_is_a_style_that_survives_xlsx() {
+        use gridcraft_model::style::KashidaLevel;
+        let mut s = crate::Session::new();
+        s.new_workbook();
+        s.execute("cell.set", json!({"cell": "A1", "input": "على الطبي مستندات"})).unwrap();
+        s.execute("home.justify", json!({"range": "A1"})).unwrap();
+        assert!(s.execute("home.kashida", json!({})).is_err(), "no level: an error, never a dialog");
+        assert!(s.execute("home.kashida", json!({"level": "lots"})).is_err());
+        assert!(s.take_ui_requests().is_empty());
+        s.execute("home.kashida", json!({"range": "A1", "level": "high"})).unwrap();
+        let st = active_style(&s).unwrap();
+        assert_eq!((st.align.h, st.align.kashida), (HAlign::Justify, KashidaLevel::High));
+        // A level is independent of the alignment and goes to Off by name.
+        s.execute("home.alignLeft", json!({"range": "A1"})).unwrap();
+        assert_eq!(active_style(&s).unwrap().align.kashida, KashidaLevel::High);
+        s.execute("home.kashida", json!({"range": "A1", "level": "Off"})).unwrap();
+        assert_eq!(active_style(&s).unwrap().align.kashida, KashidaLevel::Off);
+        // Format Cells merges the level as part of the alignment JSON, and xlsx keeps it.
+        s.execute("home.formatCells", json!({"range": "A1", "style": {"align": {"h": "Justify", "kashida": "medium"}}})).unwrap();
+        assert_eq!(active_style(&s).unwrap().align.kashida, KashidaLevel::Medium);
+        let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+        let b64 = r["base64"].as_str().unwrap().to_string();
+        s.execute("file.open", json!({"name": "k.xlsx", "base64": b64})).unwrap();
+        assert_eq!(active_style(&s).unwrap().align.kashida, KashidaLevel::Medium, "kept in the xf extLst");
     }
 
     #[test]

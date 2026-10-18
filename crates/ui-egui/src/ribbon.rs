@@ -49,15 +49,17 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
         }
-        ui.horizontal_centered(|ui| {
+        crate::rtl::horizontal_centered(ui, |ui| {
             ui.add_space(TITLE_LEFT_PAD);
             // AutoSave toggle (saves after each change when the workbook has a file).
-            ui.label(egui::RichText::new("AutoSave").font(theme::ui_font(12.5)).color(t.text_dim));
+            let rtl = crate::rtl::on(ui.ctx());
+            ui.label(egui::RichText::new(app.ui.language.tr("AutoSave")).font(theme::ui_font(12.5)).color(t.text_dim));
             let on = app.grid.autosave();
             let (r, resp) = ui.allocate_exact_size(vec2(30.0, 16.0), Sense::click());
             ui.painter().rect_filled(r, 8.0, if on { t.accent } else { Color32::TRANSPARENT });
             ui.painter().rect_stroke(r, 8.0, Stroke::new(1.0, if on { t.accent } else { t.text_dim }), StrokeKind::Inside);
-            let knob = if on { pos2(r.right() - 8.0, r.center().y) } else { pos2(r.left() + 8.0, r.center().y) };
+            // The knob travels towards the end edge when on (left in a right-to-left interface).
+            let knob = if on != rtl { pos2(r.right() - 8.0, r.center().y) } else { pos2(r.left() + 8.0, r.center().y) };
             ui.painter().circle_filled(knob, 5.0, if on { Color32::WHITE } else { t.text_dim });
             if resp.on_hover_text("AutoSave: save after every change (workbooks saved to a file)").clicked() {
                 app.grid.toggle_autosave();
@@ -122,7 +124,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 theme::ui_bold(13.0),
                 t.text,
             );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(crate::rtl::row_from_end(ui.ctx(), egui::Align::Center), |ui| {
                 ui.add_space(8.0);
                 let __k = icon_button(ui, Icon::Search, t.text_dim, "Search commands (⌘⇧Space)", vec2(28.0, ch));
                 control_keytip(app, ui, &__k, "commandSearch");
@@ -173,7 +175,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             // Tabs row.
             let tabs_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 32.0));
             ui.scope_builder(egui::UiBuilder::new().max_rect(tabs_rect), |ui| {
-                ui.horizontal(|ui| {
+                // GridCraft AR: the tabs start at the right edge in a right-to-left interface.
+                crate::rtl::horizontal(ui, |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.add_space(8.0);
                     file_menu(app, ui);
@@ -229,27 +232,63 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             ui.painter().rect_filled(card, 10.0, t.ribbon);
             ui.painter().rect_stroke(card, 10.0, Stroke::new(1.0, t.ribbon_border), StrokeKind::Inside);
             let inner = card.shrink2(vec2(10.0, 6.0));
+            let rtl = crate::rtl::on(ui.ctx());
             ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-                egui::ScrollArea::horizontal().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-                        match app.ui.ribbon_tab.as_str() {
-                            "Home" => home(app, ui),
-                            "Insert" => insert(app, ui),
-                            "Draw" => draw(app, ui),
-                            "Page Layout" => page_layout(app, ui),
-                            "Formulas" => formulas(app, ui),
-                            "Data" => data(app, ui),
-                            "Review" => review(app, ui),
-                            "View" => view(app, ui),
-                            "Automate" => automate(app, ui),
-                            "Table Design" => table_design(app, ui),
-                            "Chart Design" => chart_design(app, ui),
-                            crate::paper_view::TAB => crate::paper_view::ribbon_tab(app, ui),
-                            _ => home(app, ui),
+                // GridCraft AR, right-to-left: the groups are laid out from the right edge of a
+                // strip as wide as they were last frame (kept per tab), so a tab wider than the
+                // window scrolls as one laid out from the left does; what is kept between frames
+                // is the distance scrolled from the right end, so a tab change or a resize keeps
+                // the first groups in view.
+                let strip_w_id = ui.id().with(("rtl_groups_width", app.ui.ribbon_tab.as_str()));
+                let from_right_id = ui.id().with("rtl_groups_from_right");
+                let scroll =
+                    egui::ScrollArea::horizontal().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+                        let mut size = vec2(ui.available_size_before_wrap().x, ui.spacing().interact_size.y);
+                        if rtl {
+                            size.x = size.x.max(ui.data(|d| d.get_temp::<f32>(strip_w_id)).unwrap_or(0.0));
+                        }
+                        let strip = ui.allocate_ui_with_layout(size, crate::rtl::row(ui.ctx(), egui::Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                            match app.ui.ribbon_tab.as_str() {
+                                "Home" => home(app, ui),
+                                "Insert" => insert(app, ui),
+                                "Draw" => draw(app, ui),
+                                "Page Layout" => page_layout(app, ui),
+                                "Formulas" => formulas(app, ui),
+                                "Data" => data(app, ui),
+                                "Review" => review(app, ui),
+                                "View" => view(app, ui),
+                                "Automate" => automate(app, ui),
+                                "Table Design" => table_design(app, ui),
+                                "Chart Design" => chart_design(app, ui),
+                                crate::paper_view::TAB => crate::paper_view::ribbon_tab(app, ui),
+                                _ => home(app, ui),
+                            }
+                        });
+                        if rtl {
+                            ui.data_mut(|d| d.insert_temp(strip_w_id, strip.response.rect.width()));
                         }
                     });
-                });
+                if rtl {
+                    // The strip starts scrolled to its right end; when its overflow changes
+                    // (another tab, a resize), the distance from the right end is what stays.
+                    let overflow = scroll.content_size.x - scroll.inner_rect.width();
+                    let mut offset = scroll.state.offset.x;
+                    let last: Option<(f32, f32)> = ui.data(|d| d.get_temp(from_right_id));
+                    let from_right = match last {
+                        Some((last_overflow, last_offset)) if (last_overflow - overflow).abs() > 0.5 => Some(last_overflow - last_offset),
+                        Some(_) => None,
+                        None => Some(0.0),
+                    };
+                    if let Some(from_right) = from_right {
+                        let mut state = scroll.state;
+                        state.offset.x = (overflow - from_right).clamp(0.0, overflow.max(0.0));
+                        offset = state.offset.x;
+                        state.store(ui.ctx(), scroll.id);
+                        ui.ctx().request_repaint();
+                    }
+                    ui.data_mut(|d| d.insert_temp(from_right_id, (overflow, offset)));
+                }
             });
         });
 }
@@ -485,7 +524,13 @@ fn menu_items(app: &mut SheetApp, ui: &mut Ui, items: &[(&str, &str, serde_json:
             continue;
         }
         let lang = app.ui.language;
-        let response = ui.add(egui::Button::new(lang.tr(label)).frame(false).min_size(vec2(220.0, 22.0)));
+        // GridCraft AR: an item with a picture of its own is a gallery row (preview + text).
+        let key = crate::ui_kit::key(id, p);
+        let response = if crate::ui_kit::entries().any(|e| e.key == key) {
+            crate::ui_kit::tooltip::gallery_item(ui, &key, lang.tr(label), ui.is_enabled())
+        } else {
+            ui.add(crate::rtl::menu_item(ui.ctx(), lang.tr(label)).frame(false).min_size(vec2(220.0, 22.0)))
+        };
         if let Some(sequence) = keytip_table::item_letter(app.keytips.prefix().unwrap_or_default(), id) {
             keytip(app, ui, sequence, pos2(response.rect.right() - 10.0, response.rect.center().y));
         }
@@ -556,7 +601,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = icon_button(ui, Icon::Cut, t.text, "Cut (⌘X)", vec2(26.0, 23.0));
         control_keytip(app, ui, &__k, "edit.cut");
         if __k.clicked() {
@@ -582,8 +627,8 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Font
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
+    crate::rtl::vertical(ui, |ui| {
+        crate::rtl::horizontal(ui, |ui| {
             font_combo(app, ui, &st);
             size_combo(app, ui, &st);
             let __k = icon_button(ui, Icon::Plus, t.text, "Increase Font Size", vec2(22.0, 23.0));
@@ -597,7 +642,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
                 act(app, "home.decreaseFontSize", json!({}));
             }
         });
-        ui.horizontal(|ui| {
+        crate::rtl::horizontal(ui, |ui| {
             let __k = toggle_button(ui, Icon::Bold, st.font.bold, "Bold (⌘B)");
             control_keytip(app, ui, &__k, "home.bold");
             if __k.clicked() {
@@ -699,8 +744,8 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Alignment
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
+    crate::rtl::vertical(ui, |ui| {
+        crate::rtl::horizontal(ui, |ui| {
             for (icon, v, id, tip) in [
                 (Icon::AlignTop, VAlign::Top, "home.alignTop", "Top Align"),
                 (Icon::AlignMiddle, VAlign::Center, "home.alignMiddle", "Middle Align"),
@@ -738,7 +783,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             }
             ui.label(egui::RichText::new(app.ui.language.tr("Wrap Text")).font(theme::ui_font(12.5)));
         });
-        ui.horizontal(|ui| {
+        crate::rtl::horizontal(ui, |ui| {
             for (icon, h, id, tip) in [
                 (Icon::AlignLeft, HAlign::Left, "home.alignLeft", "Align Left"),
                 (Icon::AlignCenter, HAlign::Center, "home.alignCenter", "Center"),
@@ -762,6 +807,22 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             if __k.clicked() {
                 act(app, "home.increaseIndent", json!({}));
             }
+            // GridCraft AR: kashida level for justified Arabic text (Off / Low / Medium / High).
+            let ka = small_button(ui, Icon::Kashida, "", "Kashida", true);
+            control_keytip(app, ui, &ka, "home.kashida");
+            let forced_ka = invoke(app, "home.kashida");
+            egui::Popup::menu(&ka).open_memory(popup_command(forced_ka, ka.clicked())).show(|ui| {
+                menu_items(
+                    app,
+                    ui,
+                    &[
+                        ("Off", "home.kashida", json!({"level": "off"})),
+                        ("Low", "home.kashida", json!({"level": "low"})),
+                        ("Medium", "home.kashida", json!({"level": "medium"})),
+                        ("High", "home.kashida", json!({"level": "high"})),
+                    ],
+                );
+            });
             let (m, ma) = split_button(ui, Icon::Merge, None, "Merge & Center");
             control_keytip(app, ui, &ma, "home.mergeCenter");
             if m {
@@ -784,9 +845,9 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Number
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         number_combo(app, ui, &st);
-        ui.horizontal(|ui| {
+        crate::rtl::horizontal(ui, |ui| {
             let (c, ca) = split_button(ui, Icon::Currency, None, "Accounting Number Format");
             control_keytip(app, ui, &ca, "home.accounting");
             if c {
@@ -853,7 +914,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     egui::Popup::menu(&cs).show(|ui| cell_style_gallery(app, ui));
     sep(ui);
     // Cells
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let ins = small_button(ui, Icon::Insert, "Insert", "Insert", true);
         for sequence in keytip_table::group_extension(
             app.keytips.prefix().unwrap_or_default(),
@@ -951,8 +1012,8 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Editing
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
+    crate::rtl::vertical(ui, |ui| {
+        crate::rtl::horizontal(ui, |ui| {
             let (s, sa) = split_button(ui, Icon::Sum, None, "AutoSum (⌘⇧T)");
             control_keytip(app, ui, &sa, "formulas.autoSum");
             if s {
@@ -1442,8 +1503,8 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
             Err(e) => app.message = Some(("GridCraft".into(), crate::clean_error(&e))),
         }
     }
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
+    crate::rtl::vertical(ui, |ui| {
+        crate::rtl::horizontal(ui, |ui| {
             for (icon, tip, cid, subs) in [
                 (
                     Icon::ChartBar,
@@ -1483,7 +1544,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                 });
             }
         });
-        ui.horizontal(|ui| {
+        crate::rtl::horizontal(ui, |ui| {
             for (icon, tip, cid, subs) in [
                 (
                     Icon::ChartScatter,
@@ -1706,7 +1767,7 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     // Excel), but the key is distinct from the "View" tab so languages can word them apart.
     let screen = app.ui.language.tr("Sheet Options|View");
     let print = app.ui.language.tr("Print");
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.label(egui::RichText::new(app.ui.language.tr("Gridlines")).strong().small());
         let mut v = sh.0;
         let resp = ui.checkbox(&mut v, screen);
@@ -1721,7 +1782,7 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             act(app, "pageLayout.printGridlines", json!({"on": checkbox_on(resp.changed(), p)}));
         }
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.label(egui::RichText::new(app.ui.language.tr("Headings")).strong().small());
         let mut v = sh.1;
         let resp = ui.checkbox(&mut v, screen);
@@ -1796,7 +1857,7 @@ fn formulas(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("nameManager", json!({}));
     }
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = small_button(ui, Icon::Name, "Define Name", "Define Name", false);
         control_keytip(app, ui, &__k, "dialog:defineName");
         if __k.clicked() {
@@ -1820,7 +1881,7 @@ fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     sep(ui);
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         if small_button(ui, Icon::Trace, "Trace Precedents", "Trace Precedents", false).clicked()
             && let Ok(r) = app.run("formulas.tracePrecedents", json!({}))
         {
@@ -1835,7 +1896,7 @@ fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             app.grid.trace = None;
         }
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = small_button(ui, Icon::Fx, "Show Formulas", "Show Formulas (⌃`)", false);
         control_keytip(app, ui, &__k, "formulas.showFormulas");
         if __k.clicked() {
@@ -1871,7 +1932,7 @@ fn formulas(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = small_button(ui, Icon::Calc, "Calculate Now", "Calculate Now (F9)", false);
         control_keytip(app, ui, &__k, "formulas.calculateNow");
         if __k.clicked() {
@@ -1892,7 +1953,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         app.open_dialog("open", json!({}));
     }
     sep(ui);
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = small_button(ui, Icon::SortAsc, "", "Sort A to Z", false);
         control_keytip(app, ui, &__k, "data.sortAscending");
         if __k.clicked() {
@@ -1914,7 +1975,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         act(app, "data.filter", json!({}));
     }
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = small_button(ui, Icon::Eraser, "Clear", "Clear Filter", false);
         control_keytip(app, ui, &__k, "data.clearFilter");
         if __k.clicked() {
@@ -1979,7 +2040,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         app.open_dialog("forecastSheet", json!({}));
     }
     sep(ui);
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let __k = small_button(ui, Icon::Group, "Group", "Group", false);
         control_keytip(app, ui, &__k, "data.group");
         if __k.clicked() {
@@ -1996,7 +2057,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
             app.open_dialog("subtotal", json!({}));
         }
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         if small_button(ui, Icon::Plus, "Show Detail", "Show Detail", false).clicked() {
             act(app, "data.showDetail", json!({}));
         }
@@ -2041,7 +2102,7 @@ fn review(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         act(app, "review.deleteComment", json!({}));
     }
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         for (icon, label, tip, id) in
             [(Icon::Left, "Previous", "Previous Comment", "review.previousComment"), (Icon::Right, "Next", "Next Comment", "review.nextComment")]
         {
@@ -2118,7 +2179,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
     let page_layout =
         app.session.active().and_then(|d| d.wb.active().map(|s| s.view == gridcraft_engine::model::SheetViewMode::PageLayout)).unwrap_or(false);
     // Two columns of two, as in Excel's Show group: four stacked rows overflow the ribbon body.
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         // Rulers exist only in Page Layout view.
         let mut ruler = !app.session.hide_ruler;
         let ruler_resp = ui.add_enabled(page_layout, egui::Checkbox::new(&mut ruler, lang.tr("Ruler")));
@@ -2134,7 +2195,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     ui.add_space(6.0);
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         let mut fb = app.session.prefs.formula_bar;
         let resp = ui.checkbox(&mut fb, lang.tr("Formula Bar"));
         control_keytip(app, ui, &resp, "view.formulaBar");
@@ -2184,7 +2245,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.label(lang.tr("Display theme"));
         let mode = app.ui.theme_mode();
         let label = match mode {
@@ -2207,7 +2268,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Interface size (issue #230): scales the whole window on top of the desktop's scale.
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.label(egui::RichText::new(lang.tr("Interface size")).font(theme::ui_font(11.5)).color(t.text_dim));
         let current = app.ui.interface_scale;
         let text = |v: u16| if v == 100 { lang.tr("Auto").to_string() } else { format!("{v}%") };
@@ -2224,7 +2285,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
     });
     // Interface language: settings live in the View tab, like Excel's Options. The label follows
     // the current language so it stays readable; the choices are always shown in their own script.
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.label(egui::RichText::new(lang.tr("Interface language")).font(theme::ui_font(11.5)).color(t.text_dim));
         egui::ComboBox::from_id_salt("ui_language").width(120.0).selected_text(egui::RichText::new(lang.name()).font(theme::ui_font(12.5))).show_ui(
             ui,
@@ -2236,7 +2297,22 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
                 }
             },
         );
+        // GridCraft AR: new workbooks start right-to-left, in Excel's Arabic default font.
+        let mut arabic = app.ui.arabic_workbooks;
+        let hint = lang.tr("New workbooks start right-to-left with Arial 11 as the default font");
+        if ui.checkbox(&mut arabic, lang.tr("Arabic workbooks")).on_hover_text(hint).changed() {
+            act(app, "view.arabicWorkbooks", json!({"on": arabic}));
+        }
     });
+    // GridCraft AR: the built-in developer systems (UI Kit gallery, icon sheet, self-test,
+    // checklist), see `crate::dev_tools`.
+    sep(ui);
+    if big_button(ui, Icon::Table, "UI Kit", "UI Kit: every button's picture and explanation, the icons, the checklist", false).clicked() {
+        app.open_dialog("uiKit", json!({"tab": "UI Kit"}));
+    }
+    if big_button(ui, Icon::Check, "Self-Test", "Self-Test: runs every engine command on a scratch workbook and lists the answers", false).clicked() {
+        app.open_dialog("uiKit", json!({"tab": "Self-test"}));
+    }
 }
 
 fn automate(app: &mut SheetApp, ui: &mut Ui) {
@@ -2273,7 +2349,7 @@ fn table_design(app: &mut SheetApp, ui: &mut Ui) {
     }) else {
         return;
     };
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.label(egui::RichText::new("Table Name:").small());
         let field = egui::Id::new(("gridcraft.table_name", &tname));
         if let Some(name) = crate::widgets::committed_text(ui, field, &tname, Some(120.0))
@@ -2298,26 +2374,26 @@ fn table_design(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "table.insertSlicer", json!({"table": tname}));
     }
     sep(ui);
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         for (label, cmd, v) in [
             ("Header Row", "table.headerRow", header && filter),
             ("Total Row", "table.totalRow", totals),
             ("Banded Rows", "table.bandedRows", banded),
         ] {
             let mut on = v;
-            if ui.checkbox(&mut on, label).changed() {
+            if ui.checkbox(&mut on, app.ui.language.tr(label)).changed() {
                 act(app, cmd, json!({"table": tname, "on": on}));
             }
         }
     });
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         for (label, cmd, v) in [
             ("First Column", "table.firstColumn", first),
             ("Last Column", "table.lastColumn", last),
             ("Banded Columns", "table.bandedColumns", banded_c),
         ] {
             let mut on = v;
-            if ui.checkbox(&mut on, label).changed() {
+            if ui.checkbox(&mut on, app.ui.language.tr(label)).changed() {
                 act(app, cmd, json!({"table": tname, "on": on}));
             }
         }

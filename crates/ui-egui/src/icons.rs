@@ -31,6 +31,8 @@ pub enum Icon {
     IndentDec,
     IndentInc,
     Wrap,
+    /// Kashida: two text lines, the lower one with a stretched (accent) letter joint.
+    Kashida,
     Merge,
     Currency,
     Percent,
@@ -307,6 +309,18 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
             g.text(6.0, 9.0, "ab", 8.5, c, false, false);
             g.stroke(&[(9.0, 13.0), (14.0, 3.0)], BLUE);
             g.poly(&[(14.5, 2.0), (12.0, 4.0), (14.6, 5.2)], BLUE);
+        }
+        Icon::Kashida => {
+            // Two lines of "letters" (short dashes); the second has one joint stretched to fill
+            // the line — the kashida, in the accent colour.
+            for x in [2.0, 5.5, 9.0, 12.5] {
+                g.stroke(&[(x, 4.0), (x + 2.0, 4.0)], c);
+            }
+            g.stroke(&[(2.0, 10.0), (4.0, 10.0)], c);
+            g.line(&[(4.0, 10.0), (12.0, 10.0)], BLUE, 1.6);
+            g.stroke(&[(12.0, 10.0), (14.0, 10.0)], c);
+            g.circle(8.0, 10.0, 0.9, Some(BLUE), None);
+            g.stroke(&[(2.0, 13.5), (14.0, 13.5)], light);
         }
         Icon::Wrap => {
             g.stroke(&[(2.0, 4.0), (14.0, 4.0)], c);
@@ -753,4 +767,151 @@ pub const LIBRARY: &[(&str, Icon)] = &[
 
 pub fn from_name(name: &str) -> Option<Icon> {
     LIBRARY.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, i)| *i)
+}
+
+/// Every icon, in the order the enum declares them (the Developer tools' icon sheet; the test
+/// below keeps it complete).
+pub const ALL: &[Icon] = &[
+    Icon::Paste,
+    Icon::Cut,
+    Icon::Copy,
+    Icon::Brush,
+    Icon::Bold,
+    Icon::Italic,
+    Icon::Underline,
+    Icon::Strike,
+    Icon::Borders,
+    Icon::BorderAll,
+    Icon::BorderNone,
+    Icon::BorderOutside,
+    Icon::BorderThick,
+    Icon::Fill,
+    Icon::FontColor,
+    Icon::AlignTop,
+    Icon::AlignMiddle,
+    Icon::AlignBottom,
+    Icon::AlignLeft,
+    Icon::AlignCenter,
+    Icon::AlignRight,
+    Icon::Orientation,
+    Icon::IndentDec,
+    Icon::IndentInc,
+    Icon::Wrap,
+    Icon::Kashida,
+    Icon::Merge,
+    Icon::Currency,
+    Icon::Percent,
+    Icon::Comma,
+    Icon::DecInc,
+    Icon::DecDec,
+    Icon::CondFormat,
+    Icon::FormatTable,
+    Icon::CellStyles,
+    Icon::Insert,
+    Icon::Delete,
+    Icon::Format,
+    Icon::Sum,
+    Icon::FillDown,
+    Icon::Eraser,
+    Icon::SortFilter,
+    Icon::Find,
+    Icon::Undo,
+    Icon::Redo,
+    Icon::Save,
+    Icon::Home,
+    Icon::More,
+    Icon::Chevron,
+    Icon::ChevronUp,
+    Icon::Close,
+    Icon::Check,
+    Icon::Fx,
+    Icon::Plus,
+    Icon::Left,
+    Icon::Right,
+    Icon::Normal,
+    Icon::PageLayout,
+    Icon::PageBreak,
+    Icon::Minus,
+    Icon::Table,
+    Icon::PivotTable,
+    Icon::Chart,
+    Icon::ChartBar,
+    Icon::ChartLine,
+    Icon::ChartPie,
+    Icon::ChartScatter,
+    Icon::Picture,
+    Icon::Shapes,
+    Icon::Link,
+    Icon::Comment,
+    Icon::Note,
+    Icon::TextBox,
+    Icon::Symbol,
+    Icon::Sparkline,
+    Icon::Checkbox,
+    Icon::Function,
+    Icon::Name,
+    Icon::Trace,
+    Icon::Calc,
+    Icon::Filter,
+    Icon::SortAsc,
+    Icon::SortDesc,
+    Icon::Duplicates,
+    Icon::TextColumns,
+    Icon::Validation,
+    Icon::Group,
+    Icon::Ungroup,
+    Icon::Subtotal,
+    Icon::Lock,
+    Icon::Spell,
+    Icon::Freeze,
+    Icon::Zoom,
+    Icon::Gridlines,
+    Icon::Theme,
+    Icon::Margins,
+    Icon::Orient,
+    Icon::SheetRtl,
+    Icon::Paper,
+    Icon::PrintArea,
+    Icon::Script,
+    Icon::Pen,
+    Icon::Share,
+    Icon::Search,
+    Icon::Settings,
+    Icon::Appearance,
+    Icon::Sheet,
+    Icon::SheetList,
+    Icon::Book,
+    Icon::Folder,
+    Icon::Header,
+    Icon::Footer,
+    Icon::PageNumber,
+    Icon::PageCount,
+    Icon::Calendar,
+    Icon::Clock,
+    Icon::FileName,
+    Icon::Back,
+    Icon::NewFile,
+    Icon::OpenFolder,
+    Icon::Info,
+    Icon::Print,
+];
+
+#[cfg(test)]
+mod all_icons {
+    use super::*;
+
+    /// `ALL` lists every variant of `Icon`, read back from this file's own source.
+    #[test]
+    fn all_lists_every_variant() {
+        let src = include_str!("icons.rs");
+        let body = src.split("pub enum Icon {").nth(1).and_then(|s| s.split("\n}").next()).unwrap_or("");
+        let declared: Vec<&str> = body
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with("//") && !l.starts_with('#'))
+            .map(|l| l.trim_end_matches(','))
+            .collect();
+        let listed: Vec<String> = ALL.iter().map(|i| format!("{i:?}")).collect();
+        assert_eq!(listed, declared, "icons::ALL must list every Icon variant, in declaration order");
+    }
 }

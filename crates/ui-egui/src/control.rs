@@ -181,6 +181,11 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                 ("view.darkMode", "Dark Mode", ""),
                 ("view.theme", "Display Theme", ""),
                 ("view.animations", "Animations", "{on?: bool} (toggles without it) → {on}"),
+                (
+                    "view.arabicWorkbooks",
+                    "Arabic workbooks",
+                    "{on?: bool} (toggles without it) → {on}; new workbooks start right-to-left in Arial 11",
+                ),
                 ("options.autoComplete", "Enable AutoComplete for cell values", "{on?: bool} (toggles without it) → {on}"),
                 ("view.interfaceScale", "Interface Size", "{percent: 75–200 | \"auto\"} (100 = auto; clamped)"),
                 ("ui.dialog", "Open Dialog", ""),
@@ -195,7 +200,11 @@ pub fn handle(app: &mut SheetApp, ctx: &egui::Context, method: &str, p: &Json) -
                     "Submit Print Job",
                     "existing file.print sheet/pagination params → {printing,bytes,pending}; submits without opening a dialog",
                 ),
-                ("app.language.set", "Interface Language", "{language: \"en\"|\"zh\"|\"ja\"|\"ko\"|\"ru\"|\"pt\"|\"de\"|\"cs\"} (alias: code)"),
+                (
+                    "app.language.set",
+                    "Interface Language",
+                    "{language: \"en\"|\"ar\"|\"es\"|\"zh\"|\"ja\"|\"ko\"|\"ru\"|\"pt\"|\"de\"|\"cs\"|\"fr\"|\"sr\"} (alias: code)",
+                ),
                 ("app.language.english", "Interface Language: English", ""),
                 ("app.language.japanese", "Interface Language: Japanese", ""),
             ] {

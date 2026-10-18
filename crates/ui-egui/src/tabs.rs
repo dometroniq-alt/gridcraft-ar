@@ -40,13 +40,17 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
     egui::Panel::bottom("sheet_tabs").exact_size(32.0).frame(egui::Frame::NONE.fill(t.tab_bar)).show(ui, |ui| {
         let rect = ui.max_rect();
         ui.painter().line_segment([rect.left_top(), rect.right_top()], Stroke::new(1.0, t.ribbon_border));
-        ui.horizontal_centered(|ui| {
+        // GridCraft AR: the strip starts at the right in a right-to-left interface, and the
+        // arrows point the way the sheets go (the previous sheet is to the right).
+        let rtl = crate::rtl::on(ui.ctx());
+        crate::rtl::horizontal_centered(ui, |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.add_space(8.0);
-            if crate::widgets::icon_button(ui, Icon::Left, t.text_dim, "Previous sheet", vec2(24.0, 24.0)).clicked() {
+            let (prev, next) = if rtl { (Icon::Right, Icon::Left) } else { (Icon::Left, Icon::Right) };
+            if crate::widgets::icon_button(ui, prev, t.text_dim, "Previous sheet", vec2(24.0, 24.0)).clicked() {
                 app.run_or_alert("sheet.previous", json!({}));
             }
-            if crate::widgets::icon_button(ui, Icon::Right, t.text_dim, "Next sheet", vec2(24.0, 24.0)).clicked() {
+            if crate::widgets::icon_button(ui, next, t.text_dim, "Next sheet", vec2(24.0, 24.0)).clicked() {
                 app.run_or_alert("sheet.next", json!({}));
             }
             let all = crate::widgets::icon_button(ui, Icon::SheetList, t.text_dim, "All sheets", vec2(24.0, 24.0));
@@ -80,7 +84,8 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                 data.insert_temp(reveal_id, reveal_key);
                 changed
             });
-            ui.allocate_ui_with_layout(vec2(tabs_width, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            let strip_w_id = ui.id().with("rtl_sheet_tabs_width");
+            ui.allocate_ui_with_layout(vec2(tabs_width, 30.0), crate::rtl::row(ui.ctx(), egui::Align::Center), |ui| {
                 // Translate vertical wheel movement into horizontal
                 // worksheet-tab scrolling.
                 let wheel_scroll = if ui.rect_contains_pointer(ui.max_rect()) {
@@ -100,7 +105,13 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                         if wheel_scroll.abs() > 0.0 {
                             ui.scroll_with_delta(vec2(wheel_scroll, 0.0));
                         }
-                        ui.horizontal(|ui| {
+                        // Right-to-left: the tabs run from the right end of a strip as wide as
+                        // they were last frame, so a long strip scrolls as a left-to-right one does.
+                        let mut size = vec2(ui.available_size_before_wrap().x, 30.0);
+                        if rtl {
+                            size.x = size.x.max(ui.data(|d| d.get_temp::<f32>(strip_w_id)).unwrap_or(0.0));
+                        }
+                        let strip = ui.allocate_ui_with_layout(size, crate::rtl::row(ui.ctx(), egui::Align::Center), |ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
                             for (i, name, color, active) in sheets {
                                 let renaming = app.grid.renaming_tab == Some(i);
@@ -167,48 +178,52 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                     }
                                 }
                                 resp.context_menu(|ui| {
+                                    let lang = app.ui.language;
                                     ui.set_min_width(180.0);
-                                    if ui.button("Insert Sheet").clicked() {
+                                    if ui.button(lang.tr("Insert Sheet")).clicked() {
                                         app.run_or_alert("home.insertSheet", json!({"before": i}));
                                     }
-                                    if ui.button("Delete").clicked() {
+                                    if ui.button(lang.tr("Delete")).clicked() {
                                         app.run_or_alert("home.deleteSheet", json!({"sheet": i}));
                                     }
-                                    if ui.button("Rename").clicked() {
+                                    if ui.button(lang.tr("Rename")).clicked() {
                                         app.grid.renaming_tab = Some(i);
                                         app.grid.rename_text = name.clone();
                                     }
-                                    if ui.button("Move or Copy…").clicked() {
+                                    if ui.button(lang.tr("Move or Copy…")).clicked() {
                                         app.open_dialog("moveSheet", json!({"sheet": i}));
                                     }
-                                    if ui.button("Duplicate").clicked() {
+                                    if ui.button(lang.tr("Duplicate")).clicked() {
                                         app.run_or_alert("sheet.move", json!({"sheet": i, "to": i + 1, "copy": true}));
                                     }
-                                    ui.menu_button("Tab Color", |ui| {
+                                    ui.menu_button(lang.tr("Tab Color"), |ui| {
                                         let colors = app.session.active().map(|d| d.wb.theme.colors).unwrap_or_default();
-                                        if let Some(c) = crate::widgets::color_palette(ui, &colors, "No Color") {
+                                        if let Some(c) = crate::widgets::color_palette(ui, &colors, lang.tr("No Color")) {
                                             app.run_or_alert("sheet.tabColor", json!({"sheet": i, "color": c}));
                                             ui.close();
                                         }
                                     });
                                     ui.separator();
-                                    if ui.button("Hide").clicked() {
+                                    if ui.button(lang.tr("Hide")).clicked() {
                                         app.run_or_alert("sheet.hide", json!({"sheet": i}));
                                     }
-                                    if ui.button("Unhide…").clicked() {
+                                    if ui.button(lang.tr("Unhide…")).clicked() {
                                         app.run_or_alert("sheet.unhide", json!({}));
                                     }
                                     ui.separator();
                                     let protected = app.session.active().and_then(|d| d.wb.active().map(|s| s.is_protected())).unwrap_or(false);
-                                    if ui.button(if protected { "Unprotect Sheet…" } else { "Protect Sheet…" }).clicked() {
+                                    if ui.button(lang.tr(if protected { "Unprotect Sheet…" } else { "Protect Sheet…" })).clicked() {
                                         app.open_dialog(if protected { "unprotectSheet" } else { "protectSheet" }, json!({}));
                                     }
-                                    if ui.button("Select All Sheets").clicked() {
+                                    if ui.button(lang.tr("Select All Sheets")).clicked() {
                                         ui.close();
                                     }
                                 });
                             }
                         });
+                        if rtl {
+                            ui.data_mut(|d| d.insert_temp(strip_w_id, strip.response.rect.width()));
+                        }
                     });
             });
             ui.add_space(6.0);
@@ -217,8 +232,13 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
             }
             // The track ends where the grid does, so it stops under the vertical scrollbar.
             let avail = ui.available_rect_before_wrap();
-            let right = app.grid.rect.map_or(avail.right(), |r| r.right()).min(avail.right());
-            let track = Rect::from_min_max(pos2(avail.left() + 8.0, avail.center().y - 7.0), pos2(right, avail.center().y + 7.0));
+            let track = if rtl {
+                let left = app.grid.rect.map_or(avail.left(), |r| r.left()).max(avail.left());
+                Rect::from_min_max(pos2(left, avail.center().y - 7.0), pos2(avail.right() - 8.0, avail.center().y + 7.0))
+            } else {
+                let right = app.grid.rect.map_or(avail.right(), |r| r.right()).min(avail.right());
+                Rect::from_min_max(pos2(avail.left() + 8.0, avail.center().y - 7.0), pos2(right, avail.center().y + 7.0))
+            };
             crate::grid::horizontal_scrollbar(app, ui, track, &t);
         });
     });
@@ -229,7 +249,8 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
     egui::Panel::bottom("status_bar").exact_size(26.0).frame(egui::Frame::NONE.fill(t.status_bar).inner_margin(egui::Margin::symmetric(12, 0))).show(
         ui,
         |ui| {
-            ui.horizontal_centered(|ui| {
+            // GridCraft AR: the mode at the start edge, the zoom cluster at the end edge.
+            crate::rtl::horizontal_centered(ui, |ui| {
                 let mode = match app.session.mode {
                     gridcraft_engine::Mode::Ready => "Ready",
                     gridcraft_engine::Mode::Enter => "Enter",
@@ -240,7 +261,9 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                 if let Some(d) = app.session.active() {
                     if d.wb.vba_project.is_some() {
                         ui.add_space(12.0);
-                        ui.label(egui::RichText::new("Macros preserved (not executed)").font(theme::ui_font(12.5)).color(t.danger));
+                        ui.label(
+                            egui::RichText::new(app.ui.language.tr("Macros preserved (not executed)")).font(theme::ui_font(12.5)).color(t.danger),
+                        );
                     }
                     if d.wb.calc.mode == gridcraft_engine::model::CalcMode::Manual {
                         ui.add_space(12.0);
@@ -261,7 +284,7 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                         );
                     }
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(crate::rtl::row_from_end(ui.ctx(), egui::Align::Center), |ui| {
                     // Zoom percentage and slider.
                     let zoom = app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100);
                     let zl = ui.add(
@@ -317,15 +340,16 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                                 .trim_end_matches('.')
                                 .to_string()
                         };
+                        let lang = app.ui.language;
                         let mut parts = Vec::new();
                         if st.numeric > 0 {
-                            parts.push(format!("Sum: {}", fmt(st.sum)));
+                            parts.push(lang.tr("Sum: {}").replace("{}", &fmt(st.sum)));
                         }
                         if st.count > 0 {
-                            parts.push(format!("Count: {}", st.count));
+                            parts.push(lang.tr("Count: {}").replace("{}", &st.count.to_string()));
                         }
                         if let Some(a) = st.average {
-                            parts.push(format!("Average: {}", fmt(a)));
+                            parts.push(lang.tr("Average: {}").replace("{}", &fmt(a)));
                         }
                         for p in parts {
                             ui.label(egui::RichText::new(p).font(theme::ui_font(12.5)).color(t.text_dim));

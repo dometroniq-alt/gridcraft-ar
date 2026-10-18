@@ -720,6 +720,16 @@ impl Dialog {
                 )
             }
             "journal" => Dialog::custom("journal", "Action Journal", json!({})),
+            // GridCraft AR: the built-in developer systems (UI Kit gallery, icon sheet, self-test,
+            // checklist), see `crate::dev_tools`. `tab` picks the open tab.
+            "uiKit" => {
+                let mut d = Dialog::custom("uiKit", "GridCraft AR UI Kit", json!({}));
+                d.tab = match p("tab").as_str() {
+                    Some(t) if crate::dev_tools::TABS.contains(&t) => t.to_string(),
+                    _ => "UI Kit".into(),
+                };
+                d
+            }
             "macros" => {
                 let mut d = Dialog::custom("macros", "Macros", json!({}));
                 d.result = app.session.run("view.macros", json!({})).ok();
@@ -1029,6 +1039,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     let width = match d.name.as_str() {
         "formatCells" => 560.0,
         "about" => 660.0,
+        "uiKit" => 780.0,
         "insertFunction" | "commandSearch" | "nameManager" | "manageRules" | "journal" | "agents" | "macros" => 520.0,
         "recommendedCharts" => 600.0,
         "analysisToolPak" => 420.0,
@@ -1070,6 +1081,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     ui.label(format!("{} engine commands are available. See docs/mcp.md and docs/control-protocol.md.", gridcraft_engine::command_specs().len()));
                 }
                 "about" => about(ui, &mut d),
+                "uiKit" => crate::dev_tools::body(app, ui, &mut d, &mut open),
                 "journal" => {
                     egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                         for (id, p) in app.session.journal.iter().rev().take(500) {

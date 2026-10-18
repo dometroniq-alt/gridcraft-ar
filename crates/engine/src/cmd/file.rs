@@ -7,7 +7,7 @@ use crate::DocState;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        cmd!(noundo "file.new", "New Workbook", ["File"], Some("Cmd+N"), "{sample?: \"budget\"|\"sales\"|\"grades\"}", always, new_workbook),
+        cmd!(noundo "file.new", "New Workbook", ["File"], Some("Cmd+N"), "{sample?: \"budget\"|\"sales\"|\"grades\", rightToLeft?: bool (every sheet starts right-to-left), defaultFont?, defaultFontSize? (the Normal style of a blank workbook, e.g. \"Arial\" 11)}", always, new_workbook),
         cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path} | {name, base64}, plus {password} for a password-protected workbook (xlsx, xlsm, xls import, xlsb and ods data import, csv, tsv, txt, json)", always, open),
         cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension)", has_doc, save),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path} (.xlsx, .csv, .tsv, .json, .html, or .pdf: a PDF of the active sheet)", has_doc, save_as),
@@ -38,6 +38,35 @@ fn new_workbook(s: &mut Session, p: &Json) -> Result<Json> {
         }
         None => s.new_workbook(),
     };
+    // GridCraft AR: an Arabic workbook starts with its sheets right-to-left and, when blank, the
+    // Normal style in Excel's Arabic default font. Applied before the first save point, so the
+    // new workbook is still clean.
+    let rtl = bool_param(p, "rightToLeft").unwrap_or(false);
+    let font = str_param(p, "defaultFont").map(str::trim).filter(|f| !f.is_empty()).map(str::to_string);
+    let size = f64_param(p, "defaultFontSize").filter(|v| v.is_finite()).map(|v| (v as f32).clamp(1.0, 409.0));
+    if rtl || font.is_some() || size.is_some() {
+        let d = s.doc_mut()?;
+        let wb = std::sync::Arc::make_mut(&mut d.wb);
+        if rtl {
+            for sh in &mut wb.sheets {
+                std::sync::Arc::make_mut(sh).right_to_left = true;
+            }
+        }
+        // Only a blank workbook takes a default font: a sample's cells already use its styles.
+        if (font.is_some() || size.is_some()) && wb.styles.len() == 1 {
+            let mut normal = wb.styles.get(gridcraft_model::StyleId::DEFAULT).clone();
+            if let Some(f) = &font {
+                normal.font.name = f.clone();
+                wb.theme.major_font = f.clone();
+                wb.theme.minor_font = f.clone();
+            }
+            if let Some(v) = size {
+                normal.font.size = v;
+            }
+            wb.styles = gridcraft_model::StyleTable::with_default(normal);
+        }
+        d.saved = d.wb.clone();
+    }
     Ok(json!({"index": i, "title": s.doc()?.display_title()}))
 }
 
@@ -211,4 +240,34 @@ fn activate_window(s: &mut Session, p: &Json) -> Result<Json> {
     }
     s.set_active(i);
     ok()
+}
+
+#[cfg(test)]
+mod arabic_workbook_tests {
+    use serde_json::json;
+
+    use crate::Session;
+
+    #[test]
+    fn file_new_can_start_right_to_left_in_a_default_font() {
+        let mut s = Session::new();
+        s.prefs.sheets_in_new_workbook = 2;
+        s.execute("file.new", json!({"rightToLeft": true, "defaultFont": "Arial", "defaultFontSize": 11})).unwrap();
+        let d = s.doc().unwrap();
+        assert!(d.wb.sheets.iter().all(|sh| sh.right_to_left), "every sheet starts right-to-left");
+        let normal = d.wb.styles.get(gridcraft_model::StyleId::DEFAULT);
+        assert_eq!((normal.font.name.as_str(), normal.font.size), ("Arial", 11.0));
+        assert_eq!(d.wb.theme.minor_font, "Arial");
+        assert!(!d.is_dirty(), "a new workbook is clean");
+        // A sample keeps its own styles but still starts right-to-left.
+        s.execute("file.new", json!({"sample": "sales", "rightToLeft": true, "defaultFont": "Arial"})).unwrap();
+        let d = s.doc().unwrap();
+        assert!(d.wb.sheets.iter().all(|sh| sh.right_to_left));
+        assert_ne!(d.wb.styles.get(gridcraft_model::StyleId::DEFAULT).font.name, "Arial");
+        // Without the params nothing changes.
+        s.execute("file.new", json!({})).unwrap();
+        let d = s.doc().unwrap();
+        assert!(d.wb.sheets.iter().all(|sh| !sh.right_to_left));
+        assert_eq!(d.wb.styles.get(gridcraft_model::StyleId::DEFAULT).font.name, gridcraft_model::DEFAULT_FONT);
+    }
 }

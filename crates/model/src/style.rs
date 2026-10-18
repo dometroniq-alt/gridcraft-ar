@@ -307,6 +307,44 @@ pub enum VAlign {
     Distributed,
 }
 
+/// How much of a justified Arabic line's slack goes into kashida (lengthened letter joints,
+/// drawn with tatweel) rather than wider spaces. Excel keeps this implicit, so a file stores it
+/// in a GridCraft extension on the cell format; Excel shows plain Justify / Distributed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KashidaLevel {
+    /// Justify widens spaces only; Distributed uses the default (medium) share.
+    #[default]
+    Off,
+    /// 35 % of the slack lengthens one joint per word, spaces take the rest.
+    Low,
+    /// 60 %.
+    Medium,
+    /// 90 %.
+    High,
+}
+
+impl KashidaLevel {
+    /// The level named in a command or file (`off`, `low`, `medium`, `high`; case-insensitive).
+    pub fn parse(s: &str) -> Option<KashidaLevel> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "off" | "none" => Some(KashidaLevel::Off),
+            "low" => Some(KashidaLevel::Low),
+            "medium" => Some(KashidaLevel::Medium),
+            "high" => Some(KashidaLevel::High),
+            _ => None,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            KashidaLevel::Off => "off",
+            KashidaLevel::Low => "low",
+            KashidaLevel::Medium => "medium",
+            KashidaLevel::High => "high",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Alignment {
     pub h: HAlign,
@@ -316,6 +354,9 @@ pub struct Alignment {
     pub indent: u8,
     /// Degrees -90..=90, or 255 for vertical stacked text.
     pub rotation: i16,
+    /// Kashida share for justified Arabic text (GridCraft AR); `Off` by default.
+    #[serde(default)]
+    pub kashida: KashidaLevel,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

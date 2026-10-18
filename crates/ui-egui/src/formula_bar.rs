@@ -16,7 +16,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         .exact_size(h)
         .frame(egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin { left: 8, right: 8, top: 3, bottom: 3 }))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
+            // GridCraft AR: the name box sits at the right in a right-to-left interface.
+            crate::rtl::horizontal(ui, |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 name_box(app, ui, &t);
                 ui.add_space(4.0);
@@ -34,7 +35,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 ui.add_space(4.0);
                 // The formula field.
                 let avail = ui.available_width() - 24.0;
-                let field = Rect::from_min_size(ui.cursor().min, vec2(avail, h - 6.0));
+                let (field, _) = ui.allocate_exact_size(vec2(avail, h - 6.0), Sense::hover());
                 ui.painter().rect_filled(field, 4.0, t.input_bg);
                 ui.painter().rect_stroke(field, 4.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(field.shrink2(vec2(6.0, 3.0))));
@@ -53,7 +54,6 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                     }
                 }
                 let _ = editing_here;
-                ui.allocate_space(vec2(avail, h - 6.0));
                 let chevron = if expanded { Icon::ChevronUp } else { Icon::Chevron };
                 if crate::widgets::icon_button(ui, chevron, t.text_dim, "Expand formula bar", vec2(20.0, 22.0)).clicked() {
                     app.ui.formula_bar_expanded = !app.ui.formula_bar_expanded;
@@ -99,10 +99,11 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) {
     let id = egui::Id::new("gridcraft.name_box");
     let shown = app.name_box_text();
     let mut text = app.name_box.clone().unwrap_or(shown.clone());
-    let rect = Rect::from_min_size(ui.cursor().min, vec2(118.0, 24.0));
+    let (rect, _) = ui.allocate_exact_size(vec2(118.0, 24.0), Sense::hover());
     ui.painter().rect_filled(rect, 4.0, t.input_bg);
     ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0, t.input_border), StrokeKind::Inside);
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0))));
+    let text_rect = crate::rtl::mirror_x(ui.ctx(), Rect::from_min_size(rect.min + vec2(6.0, 3.0), vec2(96.0, 18.0)), rect);
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(text_rect));
     let resp = child.add(TextEdit::singleline(&mut text).id(id).frame(egui::Frame::NONE).font(theme::ui_font(13.0)).desired_width(96.0));
     if resp.gained_focus() {
         app.name_box = Some(shown.clone());
@@ -134,11 +135,10 @@ fn name_box(app: &mut SheetApp, ui: &mut egui::Ui, t: &Tokens) {
         }
         app.name_box = None;
     }
-    ui.allocate_space(vec2(118.0, 24.0));
     // Dropdown of names.
     let names: Vec<String> =
         app.session.active().map(|d| d.wb.names.iter().filter(|n| !n.hidden).map(|n| n.name.clone()).collect()).unwrap_or_default();
-    let mb = Rect::from_min_size(pos2(rect.right() - 16.0, rect.top() + 4.0), vec2(14.0, 16.0));
+    let mb = crate::rtl::mirror_x(ui.ctx(), Rect::from_min_size(pos2(rect.right() - 16.0, rect.top() + 4.0), vec2(14.0, 16.0)), rect);
     icons::paint(ui.painter(), mb, Icon::Chevron, t.text_dim);
     let r = ui.interact(mb, id.with("drop"), Sense::click());
     egui::Popup::menu(&r).show(|ui| {

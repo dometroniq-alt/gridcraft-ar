@@ -12,6 +12,7 @@ mod cell_pictures;
 pub mod chartview;
 pub mod control;
 pub mod credits;
+pub mod dev_tools;
 pub mod dialogs;
 pub mod editor;
 pub mod fonts;
@@ -20,6 +21,7 @@ mod formula_locale;
 pub mod grid;
 pub mod i18n;
 pub mod icons;
+pub mod kashida;
 pub mod keymap;
 pub mod keytips;
 pub mod outline;
@@ -28,10 +30,12 @@ pub mod paper_view;
 pub mod pivot_pane;
 pub mod printing;
 pub mod ribbon;
+pub mod rtl;
 pub mod selection_glide;
 pub mod tabs;
 pub mod text_box;
 pub mod theme;
+pub mod ui_kit;
 pub mod widgets;
 
 use std::collections::HashMap;
@@ -76,6 +80,10 @@ pub struct UiState {
     /// [`INTERFACE_SCALE_MIN`]..=[`INTERFACE_SCALE_MAX`]; a malformed saved value reads as 100.
     #[serde(deserialize_with = "lenient_interface_scale")]
     pub interface_scale: u16,
+    /// GridCraft AR: a new workbook starts Arabic — its sheets right-to-left and, when blank, the
+    /// Normal style in Arial 11 (Excel's Arabic default). On by default; View › Arabic workbooks
+    /// and `view.arabicWorkbooks` switch it.
+    pub arabic_workbooks: bool,
 }
 
 pub const INTERFACE_SCALE_MIN: u16 = 75;
@@ -107,6 +115,7 @@ impl Default for UiState {
             keytip_invoke: None,
             language: i18n::Language::En,
             interface_scale: 100,
+            arabic_workbooks: true,
         }
     }
 }
@@ -380,6 +389,7 @@ impl SheetApp {
         if let Some(r) = self.run_ui_command(id, &params) {
             return r;
         }
+        let params = self.arabic_workbook_params(id, params);
         let r = self.session.run(id, params);
         self.after_engine();
         // The new chart is selected, as after inserting any object, so Delete removes it, not its data.
@@ -571,6 +581,39 @@ impl SheetApp {
     }
 
     /// UI-only commands (dialogs, view toggles that aren't saved in the file).
+    /// GridCraft AR: with the "Arabic workbooks" preference on, `file.new` gets the Arabic
+    /// defaults (sheets right-to-left; a blank workbook's Normal style in Arial 11) unless the
+    /// caller set them itself. Other commands pass through untouched.
+    fn arabic_workbook_params(&self, id: &str, params: Json) -> Json {
+        if id != "file.new" || !self.ui.arabic_workbooks {
+            return params;
+        }
+        let mut p = if params.is_object() { params } else { json!({}) };
+        if let Some(o) = p.as_object_mut() {
+            o.entry("rightToLeft").or_insert(json!(true));
+            o.entry("defaultFont").or_insert(json!("Arial"));
+            o.entry("defaultFontSize").or_insert(json!(11));
+        }
+        p
+    }
+
+    /// GridCraft AR: the blank `Book1` the app opens with is created before the preferences are
+    /// read, so once they are, an untouched blank starter workbook is made again through
+    /// `file.new`, which gives it the Arabic defaults when the preference is on. A workbook with
+    /// content, a file or unsaved changes is left alone.
+    pub fn apply_arabic_workbook_default(&mut self) {
+        if !self.ui.arabic_workbooks || self.session.documents().len() != 1 {
+            return;
+        }
+        let blank = self
+            .session
+            .active()
+            .is_some_and(|d| d.path.is_none() && !d.is_dirty() && d.wb.sheets.iter().all(|sh| sh.used_range().is_none() && !sh.right_to_left));
+        if blank && self.run("file.new", json!({})).is_ok() && self.session.documents().len() == 2 {
+            self.session.close_document(0);
+        }
+    }
+
     fn run_ui_command(&mut self, id: &str, p: &Json) -> Option<Result<Json, String>> {
         let r = match id {
             "ui.printSettings" => printing::settings(&mut self.printing, p, self.services.printers.as_ref()),
@@ -604,6 +647,10 @@ impl SheetApp {
                 self.ui.animations = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.animations);
                 Ok(json!({"on": self.ui.animations}))
             }
+            "view.arabicWorkbooks" => {
+                self.ui.arabic_workbooks = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.arabic_workbooks);
+                Ok(json!({"on": self.ui.arabic_workbooks}))
+            }
             "options.autoComplete" => {
                 self.ui.autocomplete = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.autocomplete);
                 Ok(json!({"on": self.ui.autocomplete}))
@@ -631,7 +678,9 @@ impl SheetApp {
                         self.ui.language = l;
                         Ok(json!({"language": l}))
                     }
-                    None => Err(format!("unknown language {code:?} (use \"en\", \"es\", \"zh\", \"ja\", \"ko\", \"ru\", \"pt\" or \"cs\")")),
+                    None => Err(format!(
+                        "unknown language {code:?} (use \"en\", \"ar\", \"es\", \"zh\", \"ja\", \"ko\", \"ru\", \"pt\", \"de\", \"cs\", \"fr\" or \"sr\")"
+                    )),
                 }
             }
             "app.language.english" => {
