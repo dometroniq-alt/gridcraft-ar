@@ -791,3 +791,144 @@ mod tests {
         }
     }
 }
+
+/// GridCraft AR: `s` with its runs in the order egui draws a right-to-left label correctly.
+/// epaint lays a label's font runs out left to right in logical order and shapes each on its
+/// own, so "انسخ A1:A3 ثم" would show the Arabic words right to left but the sequence *word,
+/// A1:A3, word* left to right. UAX #9's visual run order, applied to the runs of one line,
+/// gives a string egui draws as the bidi algorithm would. Arabic-Indic digits, which share the
+/// Arabic face with the letters, are written backwards so the shaper's reversal of that run
+/// puts them in reading order. Strings with no right-to-left character come back unchanged.
+pub fn rtl_display(s: &str) -> std::borrow::Cow<'_, str> {
+    if !s.chars().any(|c| is_rtl_char(c) || is_arabic_digit(c)) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len());
+    for (i, line) in s.split('\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        out.push_str(&rtl_display_line(line));
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+fn rtl_display_line(line: &str) -> String {
+    use unicode_bidi::{BidiInfo, Level};
+    if line.is_empty() {
+        return String::new();
+    }
+    let info = BidiInfo::new(line, Some(Level::rtl()));
+    let Some(para) = info.paragraphs.first() else { return line.to_string() };
+    let (levels, runs) = info.visual_runs(para, para.range.clone());
+    let mut out = String::with_capacity(line.len());
+    for r in runs {
+        let Some(piece) = line.get(r.clone()) else { continue };
+        let ltr = levels.get(r.start).is_some_and(|l| l.is_ltr());
+        if ltr {
+            if piece.chars().all(|c| is_arabic_digit(c) || c == '٫' || c == '٬') {
+                out.extend(piece.chars().rev());
+            } else {
+                out.push_str(piece);
+            }
+        } else {
+            out.push_str(&rtl_run_for_faces(piece));
+        }
+    }
+    out
+}
+
+/// One right-to-left bidi run as egui will draw it. The Arabic interface face has the Arabic
+/// letters, the space and a few marks (`.,:!-«»`), so a bracket, a quote, a question mark or a
+/// slash in Arabic text comes from the Latin face: epaint then cuts the run into one font run
+/// per face and lays those out left to right, undoing the right-to-left order of the pieces.
+/// Emitting the pieces in reverse order (the Arabic ones unchanged: the shaper reverses them)
+/// restores it; a bracket drawn by the Latin face is mirrored by hand, as the shaper would
+/// have in a right-to-left run.
+fn rtl_run_for_faces(run: &str) -> String {
+    let mut pieces: Vec<(bool, String)> = Vec::new();
+    for c in run.chars() {
+        let arabic = in_arabic_face(c);
+        match pieces.last_mut() {
+            Some((a, s)) if *a == arabic => s.push(c),
+            _ => pieces.push((arabic, c.to_string())),
+        }
+    }
+    if pieces.len() < 2 {
+        return run.to_string();
+    }
+    let mut out = String::with_capacity(run.len());
+    for (arabic, s) in pieces.iter().rev() {
+        if *arabic {
+            out.push_str(s);
+        } else {
+            out.extend(s.chars().rev().map(mirror));
+        }
+    }
+    out
+}
+
+/// A character the bundled Arabic interface face draws (so it stays in the Arabic run).
+fn in_arabic_face(c: char) -> bool {
+    is_rtl_char(c) || is_arabic_digit(c) || matches!(c, ' ' | '.' | ',' | ':' | '!' | '-' | '«' | '»' | '\u{a0}' | '\u{2010}')
+}
+
+/// The mirrored form of a paired bracket (what the shaper draws for it in right-to-left text).
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        other => other,
+    }
+}
+
+/// A character of a right-to-left script (Arabic, Hebrew, Syriac, Thaana).
+pub fn is_rtl_char(c: char) -> bool {
+    matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF)
+}
+
+/// An Arabic-Indic or extended Arabic-Indic digit.
+pub fn is_arabic_digit(c: char) -> bool {
+    matches!(c as u32, 0x0660..=0x0669 | 0x06F0..=0x06F9)
+}
+
+#[cfg(test)]
+mod rtl_display_tests {
+    use super::rtl_display;
+
+    #[test]
+    fn pure_arabic_and_english_come_back_unchanged() {
+        assert_eq!(rtl_display("دمج وتوسيط"), "دمج وتوسيط");
+        assert_eq!(rtl_display("Merge & Center"), "Merge & Center");
+    }
+
+    #[test]
+    fn a_latin_word_inside_arabic_moves_to_its_visual_place() {
+        // Logical: انسخ A1:A3 ثم → drawn left to right as: ثم | A1:A3 | انسخ.
+        // (The spaces travel with their Arabic run, where the shaper places them.)
+        let s = rtl_display("انسخ A1:A3 ثم");
+        let s = s.trim();
+        assert!(s.starts_with("ثم"), "{s}");
+        assert!(s.ends_with("انسخ"), "{s}");
+        assert!(s.contains("A1:A3"), "{s}");
+    }
+
+    #[test]
+    fn arabic_digits_are_written_backwards_for_the_shaper() {
+        assert_eq!(rtl_display("١٢٥"), "٥٢١");
+    }
+
+    #[test]
+    fn brackets_and_quotes_from_the_latin_face_keep_their_place() {
+        // Logical: يكتب (أو الخلايا) كجدول → pieces reversed: كجدول | ) mirrored… | أو الخلايا | ( | يكتب
+        let s = rtl_display("يكتب (أو الخلايا) كجدول");
+        assert_eq!(s, " كجدول(أو الخلايا)يكتب ");
+        assert_eq!(rtl_display("الورقة 'الرواتب' تصبح"), " تصبح'الرواتب'الورقة ");
+    }
+}

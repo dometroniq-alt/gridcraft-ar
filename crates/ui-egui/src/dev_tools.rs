@@ -357,7 +357,7 @@ pub fn unexplained() -> Vec<String> {
 
 /// UI-kit entries whose explanation the Arabic catalog doesn't translate.
 pub fn untranslated() -> Vec<&'static str> {
-    crate::ui_kit::entries().filter(|e| crate::ui_kit::explain(Language::Ar, e.explain) == e.explain).map(|e| e.key).collect()
+    crate::ui_kit::entries().filter(|e| Language::Ar.tr(e.explain) == e.explain).map(|e| e.key).collect()
 }
 
 /// The icon the inventory gives a UI-kit key (a menu item has none).
@@ -438,10 +438,10 @@ fn kit_gallery(ui: &mut Ui, t: &Tokens, lang: Language, filter: &str) {
             ui.vertical(|ui| {
                 ui.set_max_width(440.0);
                 ui.label(egui::RichText::new(crate::ui_kit::artwork(e.key)).font(theme::ui_bold(12.0)));
-                ui.label(egui::RichText::new(crate::ui_kit::explain(lang, e.explain)).size(11.5));
-                if arabic != e.explain {
-                    ui.add(egui::Label::new(egui::RichText::new(arabic).size(11.5).color(t.text_dim)).halign(egui::Align::RIGHT));
-                } else {
+                crate::rtl_text::paragraph(ui, crate::ui_kit::explain(lang, e.explain), theme::ui_font(11.5), t.text, 440.0);
+                if arabic != e.explain && lang != Language::Ar {
+                    crate::rtl_text::paragraph(ui, arabic, theme::ui_font(11.5), t.text_dim, 440.0);
+                } else if arabic == e.explain {
                     ui.label(egui::RichText::new(lang.tr("No Arabic translation yet")).small().color(t.danger));
                 }
             });

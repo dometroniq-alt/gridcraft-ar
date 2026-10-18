@@ -408,9 +408,18 @@ pub fn font_definitions_with(language: crate::i18n::Language, used: &[String]) -
             chain.push(format!("sys-{CELL}"));
         }
         chain.extend(if role == MONO { base_mono.clone() } else { base_prop.clone() });
-        // GridCraft AR: the embedded Arabic face right after the Latin ones, so Arabic labels and
-        // cell text are shaped and joined by one Arabic font wherever the app runs.
-        chain.push(arabic.for_role(role).to_string());
+        // GridCraft AR: the embedded Arabic face, so Arabic labels and cell text are shaped and
+        // joined by one Arabic font wherever the app runs. epaint shapes one run per font face
+        // and lays the runs out left to right, so with an Arabic interface the Arabic face comes
+        // FIRST for the interface roles: an Arabic label with its spaces then lands in one run
+        // (the face has no Latin letters or digits, so those still come from the Latin face in
+        // reading order), where a system font that happens to cover Arabic (Segoe UI, DejaVu)
+        // would split the words or shape a mixed label left to right.
+        if language == crate::i18n::Language::Ar && (role == UI || role == UI_BOLD) {
+            chain.insert(0, arabic.for_role(role).to_string());
+        } else {
+            chain.push(arabic.for_role(role).to_string());
+        }
         chain.extend(fallback.iter().cloned());
         chain.retain(|k| fonts.font_data.contains_key(k));
         fonts.families.insert(FontFamily::Name(role.into()), chain);
@@ -935,7 +944,8 @@ mod tests {
     fn embedded_arabic_face_renders_arabic_in_every_family() {
         // GridCraft AR: the Arabic face ships with the binary, so this holds on every machine: the
         // interface, bold interface and cell families all draw Arabic letters as real glyphs (not
-        // tofu), and the face sits after the Latin faces and before the system script fallbacks.
+        // tofu), and the face sits before the system script fallbacks: first in the interface
+        // chains of an Arabic interface (one run per Arabic label), after the Latin faces elsewhere.
         let fonts = font_definitions_for_language(Language::Ar);
         assert!(fonts.font_data.contains_key(ARABIC) && fonts.font_data.contains_key(ARABIC_BOLD));
         let fb: Vec<String> = fallback_faces(HanOrder::Chinese).into_iter().map(|(k, _)| k.to_string()).collect();
@@ -944,7 +954,11 @@ mod tests {
             let want = if role == UI_BOLD || role == CELL_BOLD || role == CELL_BOLD_ITALIC { ARABIC_BOLD } else { ARABIC };
             let at = chain.iter().position(|k| k == want).unwrap_or(usize::MAX);
             assert!(at != usize::MAX, "{role} lacks the Arabic face: {chain:?}");
-            assert!(at > 0, "{role}: a Latin face must lead the chain");
+            if role == UI || role == UI_BOLD {
+                assert_eq!(at, 0, "{role}: the Arabic face leads the interface chain of an Arabic interface");
+            } else {
+                assert!(at > 0, "{role}: a Latin face must lead the chain");
+            }
             let first_fb = chain.iter().position(|k| fb.contains(k)).unwrap_or(chain.len());
             assert!(at < first_fb, "{role}: the Arabic face must precede the system script faces");
         }

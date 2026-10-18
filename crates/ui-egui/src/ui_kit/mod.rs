@@ -105,7 +105,8 @@ pub fn artwork(s: &str) -> &str {
     s
 }
 
-/// An explanation in `lang`, English when the catalog has no translation.
+/// An explanation in `lang`, English when the catalog has no translation. Draw it with
+/// [`crate::rtl_text::paragraph`], which wraps Arabic in reading order.
 pub fn explain(lang: crate::i18n::Language, text: &str) -> &str {
     lang.tr(text)
 }

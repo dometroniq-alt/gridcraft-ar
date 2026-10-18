@@ -50,12 +50,13 @@ pub fn tooltip(ui: &Ui, resp: Response, key: &str, label: &str) -> Response {
         let phase = film_phase(ui, since);
         (e.draw)(&super::Draw::animated(ui.painter(), r, &t, phase));
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(super::explain(lang, e.explain)).size(11.5));
+        let font = crate::theme::ui_font(11.5);
+        crate::rtl_text::paragraph(ui, super::explain(lang, e.explain), font.clone(), t.text, SIZE.x);
         if lang != Language::Ar {
             let arabic = super::explain(Language::Ar, e.explain);
             if arabic != e.explain {
                 ui.add_space(2.0);
-                ui.add(egui::Label::new(egui::RichText::new(arabic).size(11.5).color(t.text_dim)).halign(egui::Align::RIGHT));
+                crate::rtl_text::paragraph(ui, arabic, font, t.text_dim, SIZE.x);
             }
         }
     })

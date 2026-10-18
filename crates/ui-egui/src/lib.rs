@@ -31,6 +31,7 @@ pub mod pivot_pane;
 pub mod printing;
 pub mod ribbon;
 pub mod rtl;
+pub mod rtl_text;
 pub mod selection_glide;
 pub mod tabs;
 pub mod text_box;
@@ -246,6 +247,9 @@ pub struct SheetApp {
     fonts_set: bool,
     /// Workbook fonts bound into the current font set; a change rebinds (installed fonts only).
     fonts_bound: Vec<String>,
+    /// GridCraft AR: the interface language the installed font chain was built for (the Arabic
+    /// face leads the interface roles in Arabic); a change re-installs the fonts.
+    fonts_language: Option<i18n::Language>,
     /// The (doc uid, revision) `fonts_bound` was computed for, so the style table is walked only
     /// when the workbook changes.
     fonts_seen: (u64, u64),
@@ -305,6 +309,7 @@ impl SheetApp {
             fonts_ready: false,
             fonts_set: false,
             fonts_bound: Vec::new(),
+            fonts_language: None,
             fonts_seen: (0, 0),
             fonts_rebind: false,
             fonts_han: None,
@@ -1076,12 +1081,17 @@ impl SheetApp {
             // fonts re-applies the font set, which egui activates at the next pass, so skip this
             // frame's paint (same one-frame cost as startup). Only when the workbook changed.
             let seen = self.session.active().map(|d| (d.uid, d.revision)).unwrap_or((0, 0));
-            if seen != self.fonts_seen {
+            let language_changed = self.fonts_language.is_some_and(|l| l != self.ui.language);
+            if self.fonts_language.is_none() {
+                self.fonts_language = Some(self.ui.language);
+            }
+            if seen != self.fonts_seen || language_changed {
                 let used = self.used_fonts();
                 self.fonts_seen = seen;
-                if used != self.fonts_bound {
+                if used != self.fonts_bound || language_changed {
                     ctx.set_fonts(theme::font_definitions_with(self.ui.language, &used));
                     self.fonts_bound = used;
+                    self.fonts_language = Some(self.ui.language);
                     self.fonts_rebind = true;
                     ctx.request_repaint();
                 }
